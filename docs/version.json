@@ -1,6 +1,6 @@
 {
-  "version": "0.8",
+  "version": "0.8.1",
   "released": "2026-10-03",
   "url": "https://klp-kulipa-24.github.io/ETS-TOOLS/",
-  "notes": "V0.8：答案 / 成绩修改 / AI 解析，Windows + Android 双端。"
+  "notes": "V0.8.1：下载渠道补齐（蓝奏云 / 银盘 / GitHub 解析 / 原版，Shizuku 同样四渠道），并修复 Shizuku 加速前缀失效。"
 }

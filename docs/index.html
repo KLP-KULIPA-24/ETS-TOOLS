@@ -1036,7 +1036,7 @@ html.theming, html.theming *, html.theming *::before, html.theming *::after {
   <!-- ============ 导航（Liquid Glass 控制层） ============ -->
   <nav class="nav">
     <div class="nav-in">
-      <a class="brand" href="#top" title="回到顶部"><img class="mark" src="./assets/app-icon.png" alt="" width="24" height="24" /><span>E听说助手</span><span class="nav-ver">V0.8</span></a>
+      <a class="brand" href="#top" title="回到顶部"><img class="mark" src="./assets/app-icon.png" alt="" width="24" height="24" /><span>E听说助手</span><span class="nav-ver">V0.8.1</span></a>
       <div class="nav-links">
         <a href="#demo">演示</a>
         <a href="#download">下载</a>
@@ -1344,7 +1344,7 @@ html.theming, html.theming *, html.theming *::before, html.theming *::after {
           <p>Shizuku / Root / 直读 / SAF —— 四种通道适配各种机型与权限条件，总有一条能走；Shizuku 免 Root 真机最稳，软件内同样提供下载入口。</p>
           <div class="svc-links">
             <a class="btn btn-p btn-sm" href="https://gh.b52m.cn/https://github.com/RikkaApps/Shizuku/releases/download/v13.6.0/shizuku-v13.6.0.r1086.2650830c-release.apk" target="_blank" rel="noopener">解析下载 · 推荐</a>
-            <a class="btn btn-g btn-sm" href="https://github.com/RikkaApps/Shizuku/releases/download/v13.6.0/shizuku-v13.6.0.r1086.2650830c-release.apk" target="_blank" rel="noopener">原版下载</a>
+            <a class="btn btn-g btn-sm" href="#" data-file="shizuku">全部下载方式</a>
           </div>
         </div>
       </article>
@@ -1377,7 +1377,7 @@ html.theming, html.theming *, html.theming *::before, html.theming *::after {
     <div class="foot-brand">
       <img src="./assets/app-icon.png" alt="" width="28" height="28" style="border-radius:8px" />
       <div>
-        <div class="foot-nm">E听说助手 <span class="foot-ver">V0.8</span></div>
+        <div class="foot-nm">E听说助手 <span class="foot-ver">V0.8.1</span></div>
         <div class="foot-sub">本地优先 · 不上传 · 离线可用</div>
       </div>
     </div>
@@ -1682,12 +1682,12 @@ html.theming, html.theming *, html.theming *::before, html.theming *::after {
        渠道卡「前往下载」→ 列 3 个版本（该渠道自己的链接）
        平台行「下载」    → 列 4 个渠道（都指向这一个文件）
        （dlSheet 在本脚本之后才解析，脚本执行时还是 null → DOMContentLoaded 兜底绑定） ---------- */
-    var REL_BASE = 'https://github.com/KLP-KULIPA-24/ETS-TOOLS/releases/download/V0.8/';
+    var REL_BASE = 'https://github.com/KLP-KULIPA-24/ETS-TOOLS/releases/latest/download/';
     var MIRROR = 'https://gh.b52m.cn/';
     var DL_FILES = [
-      { k: 'setup', nm: 'Windows 安装版', sz: 'ETS-TOOLS-Setup-0.8.0-x64.exe', ic: 'i-window' },
-      { k: 'win', nm: 'Windows 绿色便携版', sz: 'ETS-TOOLS-0.8.0-win.zip', ic: 'i-window' },
-      { k: 'apk', nm: 'Android 安装包', sz: 'ETS-TOOLS-Android-0.8.0.apk', ic: 'i-android' }
+      { k: 'setup', nm: 'Windows 安装版', sz: 'ETS-TOOLS-Setup-0.8.1-x64.exe', ic: 'i-window' },
+      { k: 'win', nm: 'Windows 绿色便携版', sz: 'ETS-TOOLS-0.8.1-win.zip', ic: 'i-window' },
+      { k: 'apk', nm: 'Android 安装包', sz: 'ETS-TOOLS-Android-0.8.1.apk', ic: 'i-android' }
     ];
     var DL_CHANS = [
       { k: 'lanzou', nm: '蓝奏云', ic: 'i-cloud', badge: '首选', alt: false,
@@ -1703,20 +1703,24 @@ html.theming, html.theming *, html.theming *::before, html.theming *::after {
                apk: 'https://silver.yukaidi.com/s/9Y6OtG' } },
       { k: 'parse', nm: 'GitHub 解析下载', ic: 'i-link', badge: '推荐', alt: false,
         desc: '第三方节点中转 · 国内直连更快',
-        url: { setup: MIRROR + REL_BASE + 'ETS-TOOLS-Setup-0.8.0-x64.exe',
-               win: MIRROR + REL_BASE + 'ETS-TOOLS-0.8.0-win.zip',
-               apk: MIRROR + REL_BASE + 'ETS-TOOLS-Android-0.8.0.apk' } },
+        url: { setup: MIRROR + REL_BASE + 'ETS-TOOLS-Setup-0.8.1-x64.exe',
+               win: MIRROR + REL_BASE + 'ETS-TOOLS-0.8.1-win.zip',
+               apk: MIRROR + REL_BASE + 'ETS-TOOLS-Android-0.8.1.apk' } },
       { k: 'direct', nm: 'GitHub 原版下载', ic: 'i-repo', badge: '官方', alt: true,
         desc: '官方 Releases 直链',
-        url: { setup: REL_BASE + 'ETS-TOOLS-Setup-0.8.0-x64.exe',
-               win: REL_BASE + 'ETS-TOOLS-0.8.0-win.zip',
-               apk: REL_BASE + 'ETS-TOOLS-Android-0.8.0.apk' } }
+        url: { setup: REL_BASE + 'ETS-TOOLS-Setup-0.8.1-x64.exe',
+               win: REL_BASE + 'ETS-TOOLS-0.8.1-win.zip',
+               apk: REL_BASE + 'ETS-TOOLS-Android-0.8.1.apk' } }
     ];
     var SHIZUKU_REL = 'https://github.com/RikkaApps/Shizuku/releases/download/v13.6.0/shizuku-v13.6.0.r1086.2650830c-release.apk';
     var SHIZUKU_CHANS = [
-      { k: 'parse', nm: '解析下载', ic: 'i-link', badge: '推荐', alt: false,
-        desc: '第三方节点中转', url: MIRROR + SHIZUKU_REL },
-      { k: 'direct', nm: '原版下载', ic: 'i-repo', badge: '官方', alt: true,
+      { k: 'lanzou', nm: '蓝奏云', ic: 'i-cloud', badge: '首选', alt: false,
+        desc: '国内直连 · 提取码 ets（点击自动复制）', url: 'https://wwblv.lanzoul.com/idVxv4asjhdc', pw: 'ets' },
+      { k: 'pan2', nm: '银盘', ic: 'i-drive', badge: '备选', alt: true,
+        desc: '国内直连 · 无密码', url: 'https://silver.yukaidi.com/s/xxr5tE' },
+      { k: 'parse', nm: 'GitHub 解析下载', ic: 'i-link', badge: '推荐', alt: false,
+        desc: '第三方节点中转 · 国内直连更快', url: MIRROR + SHIZUKU_REL },
+      { k: 'direct', nm: 'GitHub 原版下载', ic: 'i-repo', badge: '官方', alt: true,
         desc: '官方 Releases 直链', url: SHIZUKU_REL }
     ];
     function dlCopy(t) {
@@ -1766,7 +1770,8 @@ html.theming, html.theming *, html.theming *::before, html.theming *::after {
         if (fileK === 'shizuku') {
           dlSheetT.textContent = 'Shizuku · 选择下载方式';
           dlSheetBody.innerHTML = SHIZUKU_CHANS.map(function (c) {
-            return dlRow(c.ic, c.nm, c.desc, c.badge, c.alt, 'data-goto="' + c.url + '"');
+            var attrs = 'data-goto="' + c.url + '"' + (c.pw ? ' data-pw="' + c.pw + '"' : '');
+            return dlRow(c.ic, c.nm, c.desc, c.badge, c.alt, attrs);
           }).join('');
           dlSheet.hidden = false;
           return;
@@ -1781,7 +1786,7 @@ html.theming, html.theming *, html.theming *::before, html.theming *::after {
         }).join('');
         dlSheet.hidden = false;
       }
-      Array.prototype.forEach.call(document.querySelectorAll('.dl-col .file-row .btn'), function (b) {
+      Array.prototype.forEach.call(document.querySelectorAll('.btn[data-file]'), function (b) {
         b.addEventListener('click', function (e) {
           e.preventDefault();
           showChannels(b.dataset.file || 'setup');
