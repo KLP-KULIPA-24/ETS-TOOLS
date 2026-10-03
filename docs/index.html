@@ -192,15 +192,14 @@ h1 { margin-top: var(--s4); font-size: var(--f-hero); font-weight: 600; letter-s
 .hero-meta { margin-top: var(--s4); display: flex; gap: var(--s2); justify-content: center; flex-wrap: wrap; }
 .hero-meta span { font-size: var(--f-xs); color: var(--text-muted); padding: var(--s1) var(--s2); border: 1px solid var(--border); border-radius: 999px; }
 
-/* three.js 画布：绝对定位在 hero 背景，不影响排版 */
+/* three.js 画布：绝对定位在 hero 背景（双端同构图：全宽垫在标题下方，同手机端） */
 #gl {
-  position: absolute; inset: 0 0 0 auto; z-index: 0; pointer-events: none;
-  width: min(46%, 620px); height: 100%;
-}
-@media (max-width: 760px) {
-  #gl { inset: 0 0 auto; width: 100%; height: 56%; opacity: .5; }
+  position: absolute; inset: 0 0 auto; z-index: 0; pointer-events: none;
+  width: 100%; height: 56%; opacity: .26;
 }
 #gl canvas { display: block; width: 100%; height: 100%; }
+/* 球垫在标题文字后面：文字加底色光晕保证可读 */
+.hero h1, .hero .lede, .hero .kicker { text-shadow: 0 1px 14px var(--bg), 0 0 4px var(--bg); }
 
 /* ---------- 三大核心：液态玻璃特色卡（iOS 26 风） ---------- */
 .feat {
@@ -301,9 +300,7 @@ html[data-theme="light"] .feat-card {
   .hero-cta .btn { width: 100%; padding: 14px 24px; }
   .hero-meta { margin-top: var(--s3); gap: 6px; line-height: 1.4; }
   .hero-meta span { padding: 8px 14px; }
-  /* 球退到背景，文字加底色光晕保证可读 */
-  #gl { opacity: .26; }
-  .hero h1, .hero .lede, .hero .kicker { text-shadow: 0 1px 14px var(--bg), 0 0 4px var(--bg); }
+  /* 球透明度与文字光晕已提为基础规则（双端同构图） */
   .nav { padding: var(--s2) var(--s3); }
   .nav-in { padding: 6px 6px 6px var(--s3); }
   .btn { padding: 13px 24px; }
@@ -1092,8 +1089,8 @@ html.theming, html.theming *, html.theming *::before, html.theming *::after {
     </div>
     <div class="demo-box rev">
       <div class="vwrap">
-        <video poster="./media/E听说宣传图片.png" preload="metadata" muted loop playsinline aria-label="E听说助手 宣传片">
-          <source src="./media/E听说宣传视频.mp4" type="video/mp4">
+        <video poster="./media/promo-poster.png" preload="metadata" muted loop playsinline aria-label="E听说助手 宣传片">
+          <source src="./media/promo.mp4" type="video/mp4">
         </video>
       </div>
       <button class="demo-play" id="demoPlay" type="button" aria-label="播放演示">
@@ -1420,6 +1417,8 @@ html.theming, html.theming *, html.theming *::before, html.theming *::after {
   var progress = document.getElementById('scrollProgress');
   var navEl = document.querySelector('.nav');
   var glHost = document.getElementById('gl');
+  /* 视差淡出的基准透明度：取 CSS 计算值（inline 覆盖会把 #gl 的 .26 顶成 1） */
+  var glBaseO = glHost ? (parseFloat(getComputedStyle(glHost).opacity) || 1) : 1;
   var toTop = document.getElementById('toTop');
   var lastY = scrollY;
   function onScroll() {
@@ -1441,7 +1440,7 @@ html.theming, html.theming *, html.theming *::before, html.theming *::after {
     if (glHost && !reduceMotion) {
       var p = Math.max(0, Math.min(1, y / Math.max(1, innerHeight)));
       glHost.style.transform = 'translateY(' + (-p * 22) + '%)';
-      glHost.style.opacity = String(1 - p * 0.9);
+      glHost.style.opacity = String(glBaseO * (1 - p * 0.9));
     }
     lastY = y;
   }
@@ -1661,9 +1660,11 @@ html.theming, html.theming *, html.theming *::before, html.theming *::after {
     }
     function hidePreview() { if (pvBox) pvBox.classList.remove('show'); }
 
-    /* ---------- 下载渠道弹层 ---------- */
-    var dlSheet = document.getElementById('dlSheet');
-    if (dlSheet) {
+    /* ---------- 下载渠道弹层（dlSheet 在本脚本之后才解析，脚本执行时还是 null——DOMContentLoaded 兜底绑定） ---------- */
+    function initDlSheet() {
+      var dlSheet = document.getElementById('dlSheet');
+      if (!dlSheet || dlSheet.dataset.bound) return;
+      dlSheet.dataset.bound = '1';
       var dlSheetX = document.getElementById('dlSheetX');
       Array.prototype.forEach.call(document.querySelectorAll('.dl-col .file-row .btn'), function (b) {
         b.addEventListener('click', function (e) {
@@ -1695,6 +1696,8 @@ html.theming, html.theming *, html.theming *::before, html.theming *::after {
         if (e.key === 'Escape' && !dlSheet.hidden) dlSheet.hidden = true;
       });
     }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initDlSheet);
+    else initDlSheet();
     if (matchMedia('(pointer: coarse)').matches && vVol) {
       vMute.addEventListener('click', function () {
         /* 触屏：第一次点展开滑块，再点图标才切静音 */
@@ -1786,9 +1789,8 @@ camera.position.set(0, 0, 8.2);
 
 const group = new THREE.Group();
 scene.add(group);
-// 桌面：球落在文字右侧；移动端：回到文案上方
-group.position.set(0.75, -0.1, 0);   /* 右移量收窄：避免宽屏下球体溢出 #gl 容器被裁切 */
-if (small) group.position.set(0, 1.55, 0);
+// 双端同构图：球垫在标题下方（同手机端），不再右偏压卡
+group.position.set(0, 1.55, 0);
 
 // --- 玻璃球 ---
 const geo = new THREE.IcosahedronGeometry(2.05, small ? 20 : 48);
