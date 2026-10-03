@@ -138,6 +138,15 @@ section { max-width: 1120px; margin: 0 auto; padding: 0 var(--s4); }
 }
 .nav-links a:hover { color: var(--text); background: var(--surface); }
 .nav-links a:active { transform: scale(var(--press-scale)); }
+/* GitHub 入口：与导航项同尺寸，但带玻璃底+描边，一眼可辨是按钮 */
+.nav-links a.nav-gh {
+  display: inline-flex; align-items: center; gap: 6px;
+  color: var(--text); background: var(--glass-tint);
+  border: 1px solid var(--border);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.14);
+}
+.nav-links a.nav-gh:hover { background: var(--surface); color: var(--text); }
+.nav-links a.nav-gh .ic { width: 16px; height: 16px; color: var(--primary); }
 
 /* ---------- 按钮（胶囊 + primary 实色，无渐变无发光） ---------- */
 .btn {
@@ -1033,6 +1042,7 @@ html.theming, html.theming *, html.theming *::before, html.theming *::after {
         <a href="#how">原理</a>
         <a href="#services">服务</a>
         <a href="#faq">常见问题</a>
+        <a class="nav-gh" href="https://github.com/KLP-KULIPA-24/ETS-TOOLS" target="_blank" rel="noopener" title="GitHub 开源仓库"><svg class="ic"><use href="#i-repo"/></svg><span>GitHub</span></a>
         <button class="theme-btn keep" id="themeBtn" type="button" aria-label="切换深浅色">
           <svg class="ic" id="themeIcon"><use href="#i-moon"/></svg>
         </button>
@@ -1050,6 +1060,7 @@ html.theming, html.theming *, html.theming *::before, html.theming *::after {
       <div class="hero-cta">
         <a class="btn btn-p" href="#download">下载</a>
         <a class="btn btn-g" href="#features">查看功能</a>
+        <a class="btn btn-g" href="https://github.com/KLP-KULIPA-24/ETS-TOOLS" target="_blank" rel="noopener"><svg class="ic"><use href="#i-repo"/></svg>GitHub 仓库</a>
       </div>
       <div class="hero-meta">
         <span>Windows 10 / 11</span>
@@ -1159,7 +1170,7 @@ html.theming, html.theming *, html.theming *::before, html.theming *::after {
           <p class="meta">第三方节点中转</p>
           <span class="go">前往下载 <svg class="ic" style="width:16px;height:16px"><use href="#i-download"/></svg></span>
         </a>
-        <a class="dl-card" href="#">
+        <a class="dl-card" href="https://github.com/KLP-KULIPA-24/ETS-TOOLS/releases" target="_blank" rel="noopener">
           <div class="top"><svg class="ic"><use href="#i-repo"/></svg><h3>GitHub 直接下载</h3><span class="dl-pri alt">兜底</span></div>
           <p class="meta">官方 Releases</p>
           <span class="go">前往下载 <svg class="ic" style="width:16px;height:16px"><use href="#i-download"/></svg></span>
@@ -1371,14 +1382,14 @@ html.theming, html.theming *, html.theming *::before, html.theming *::after {
     </div>
     <nav class="foot-links">
       <a href="#demo">演示</a><a href="#features">功能</a><a href="#how">原理</a><a href="#download">下载</a>
-      <a href="https://github.com/KLP-KULIPA-24">GitHub</a>
+      <a href="https://github.com/KLP-KULIPA-24/ETS-TOOLS">GitHub 仓库</a>
     </nav>
-    <a class="foot-author" href="https://github.com/KLP-KULIPA-24" title="苦力怕.KULIPA">
+    <a class="foot-author" href="https://github.com/KLP-KULIPA-24/ETS-TOOLS" title="苦力怕.KULIPA">
       <img src="./assets/author.png" alt="苦力怕.KULIPA" width="40" height="40" />
       <span class="foot-aname">苦力怕.KULIPA</span>
     </a>
     <div class="foot-meta">
-      <span>© 2026 苦力怕.KULIPA · 仅供学习研究使用</span>
+      <span>© 2026 苦力怕.KULIPA · 仅供学习研究使用 · <a href="https://github.com/KLP-KULIPA-24/ETS-TOOLS">ETS-TOOLS</a></span>
     </div>
   </footer>
 </div>
