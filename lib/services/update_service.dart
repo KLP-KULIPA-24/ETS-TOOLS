@@ -33,33 +33,59 @@ class UpdateResult {
 }
 
 /// 版本检测：读官网上的版本号，跟本地 [kAppVersion] 比。
-/// 只请求白名单主机（https + klp-kulipa-24.github.io），任何异常都归结为"没查到"。
+/// 只请求白名单主机（https + 官网域名），任何异常都归结为"没查到"。
+/// 主站连不上（国内可能访问不了 GitHub Pages）时自动改用备用站。
 class UpdateService {
   static final UpdateService I = UpdateService._();
   UpdateService._();
 
-  /// 官网首页（人看的）与机器读的版本文件
+  /// 主站：GitHub Pages（始终最新）；机器读的版本文件放在站点根
   static const siteUrl = 'https://klp-kulipa-24.github.io/ETS-TOOLS/';
   static const versionJsonUrl = '${siteUrl}version.json';
-  static const _host = 'klp-kulipa-24.github.io';
+
+  /// 备用站（Cloudflare Workers，内容与主站一致）：主站不通时兜底
+  static const backupSiteUrl = 'https://ets-tools.klp-kulipa.workers.dev/';
+
+  /// 依次尝试的站点：先主站，再备用站
+  static const siteUrls = [siteUrl, backupSiteUrl];
+
+  static const _hosts = {
+    'klp-kulipa-24.github.io',
+    'ets-tools.klp-kulipa.workers.dev',
+  };
   static const _timeout = Duration(seconds: 8);
 
   /// 只允许 https + 白名单主机（顺带挡掉内网 / 回环 / 保留地址）
-  static bool isAllowed(Uri u) => u.scheme == 'https' && u.host == _host;
+  static bool isAllowed(Uri u) => u.scheme == 'https' && _hosts.contains(u.host);
+
+  String? _lastSiteError;
 
   Future<UpdateResult> check() async {
     final local = kAppVersion;
-    final versionUri = Uri.tryParse(versionJsonUrl);
-    final siteUri = Uri.tryParse(siteUrl);
-    if (versionUri == null ||
-        siteUri == null ||
-        !isAllowed(versionUri) ||
-        !isAllowed(siteUri)) {
-      return UpdateResult(
-        status: UpdateStatus.failed,
-        localVersion: local,
-        error: '地址不合法',
-      );
+    // 逐个站点问：任一站点拿到版本号就返回；全都不行才算失败
+    var lastError = '网络不可用';
+    for (final site in siteUrls) {
+      final r = await _checkSite(site, local);
+      if (r != null) return r;
+      lastError = _lastSiteError ?? lastError;
+    }
+    return UpdateResult(
+      status: UpdateStatus.failed,
+      localVersion: local,
+      error: lastError,
+    );
+  }
+
+  /// 查一个站点：先 version.json，再回退到首页的 nav-ver / foot-ver；查不到返回 null
+  Future<UpdateResult?> _checkSite(String site, String local) async {
+    final siteUri = Uri.tryParse(site);
+    final versionUri = Uri.tryParse('${site}version.json');
+    if (siteUri == null ||
+        versionUri == null ||
+        !isAllowed(siteUri) ||
+        !isAllowed(versionUri)) {
+      _lastSiteError = '地址不合法';
+      return null;
     }
     try {
       // 1) 优先 version.json：发版时只改这一个文件
@@ -68,30 +94,21 @@ class UpdateService {
         final remote = parseVersionFile(utf8.decode(r.bodyBytes));
         if (remote != null) return _compare(local, remote);
       }
-      // 2) 回退：抓官网首页，读 nav-ver / foot-ver 里的版本号
+      // 2) 回退：抓首页，读 nav-ver / foot-ver 里的版本号
       final p = await http.get(siteUri).timeout(_timeout);
       if (p.statusCode != 200) {
-        return UpdateResult(
-          status: UpdateStatus.failed,
-          localVersion: local,
-          error: 'HTTP ${p.statusCode}',
-        );
+        _lastSiteError = 'HTTP ${p.statusCode}';
+        return null;
       }
       final remote = parseHtmlVersion(utf8.decode(p.bodyBytes));
       if (remote == null) {
-        return UpdateResult(
-          status: UpdateStatus.failed,
-          localVersion: local,
-          error: '官网里没找到版本号',
-        );
+        _lastSiteError = '官网里没找到版本号';
+        return null;
       }
       return _compare(local, remote);
     } catch (_) {
-      return UpdateResult(
-        status: UpdateStatus.failed,
-        localVersion: local,
-        error: '网络不可用',
-      );
+      _lastSiteError = '网络不可用';
+      return null;
     }
   }
 

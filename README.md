@@ -167,7 +167,11 @@ App 启动时会（设置 → 关于 里可关）请求官网读取版本号，�
 
 所以**发新版本时要一起改这五处**：`pubspec.yaml` 的 `version:`、`lib/services/settings_service.dart` 的 `kAppVersion`、
 `windows/installer.iss` 的 `MyAppVersion`、`docs/version.json` 的 `version`、`docs/index.html` 的 `V0.8.x`（nav-ver / foot-ver）。
-比较按整数逐段（`0.10 > 0.9`），`0.8` 与 `0.8.0` 视为同一版本；App 只请求 `https://klp-kulipa-24.github.io` 这一个主机。
+比较按整数逐段（`0.10 > 0.9`），`0.8` 与 `0.8.0` 视为同一版本。
+
+App 只请求两个白名单主机：主站 `https://klp-kulipa-24.github.io/ETS-TOOLS/` 与
+备用站 `https://ets-tools.klp-kulipa.workers.dev/`（内容与主站一致）——**主站连不上就自动改问备用站**
+（国内访问不了 GitHub Pages 时不至于查不到更新）。改版时**两个站的内容都要更新**（备用站是独立的一份静态副本，不是实时反代）。
 
 ### 下载渠道与制品名
 

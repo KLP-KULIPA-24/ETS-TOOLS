@@ -77,10 +77,16 @@ void main() {
   });
 
   group('请求地址白名单', () {
-    test('只放行 https 的官网域名', () {
+    test('只放行 https 的官网域名（主站 + 备用站）', () {
       expect(
         UpdateService.isAllowed(
           Uri.parse('https://klp-kulipa-24.github.io/ETS-TOOLS/'),
+        ),
+        isTrue,
+      );
+      expect(
+        UpdateService.isAllowed(
+          Uri.parse('https://ets-tools.klp-kulipa.workers.dev/version.json'),
         ),
         isTrue,
       );
@@ -89,6 +95,17 @@ void main() {
       expect(UpdateService.isAllowed(Uri.parse('https://127.0.0.1/')), isFalse);
       expect(UpdateService.isAllowed(Uri.parse('https://192.168.1.10/')), isFalse);
       expect(UpdateService.isAllowed(Uri.parse('https://localhost/')), isFalse);
+      expect(
+        UpdateService.isAllowed(
+          Uri.parse('https://ets-tools.klp-kulipa.workers.dev.evil.com/'),
+        ),
+        isFalse,
+      );
+    });
+
+    test('站点顺序：主站在前，备用站兜底', () {
+      expect(UpdateService.siteUrls.first, UpdateService.siteUrl);
+      expect(UpdateService.siteUrls.last, UpdateService.backupSiteUrl);
     });
   });
 }
