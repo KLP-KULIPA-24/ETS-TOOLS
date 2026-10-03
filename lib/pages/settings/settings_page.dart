@@ -1960,10 +1960,7 @@ class _AndroidExtractCardState extends State<_AndroidExtractCard> {
             children: [
               ActionChip(
                 avatar: const Icon(Icons.download_rounded, size: 14),
-                label: const Text(
-                  '下载 Shizuku APK',
-                  style: TextStyle(fontSize: 12),
-                ),
+                label: const Text('下载 Shizuku APK', style: TextStyle(fontSize: 12)),
                 onPressed: () => launchUrl(
                   Uri.parse(kShizukuApkUrl),
                   mode: LaunchMode.externalApplication,
@@ -1971,9 +1968,38 @@ class _AndroidExtractCardState extends State<_AndroidExtractCard> {
               ),
               ActionChip(
                 avatar: const Icon(Icons.bolt_rounded, size: 14),
-                label: const Text('镜像下载', style: TextStyle(fontSize: 12)),
+                label: const Text('解析下载', style: TextStyle(fontSize: 12)),
                 onPressed: () => launchUrl(
                   Uri.parse(kShizukuMirrorUrl),
+                  mode: LaunchMode.externalApplication,
+                ),
+              ),
+              // 网盘兜底：解析前缀哪天挂了还能下（蓝奏云提取码 ets，点击自动复制）
+              ActionChip(
+                avatar: const Icon(Icons.cloud_outlined, size: 14),
+                label: const Text('蓝奏云（ets）', style: TextStyle(fontSize: 12)),
+                onPressed: () async {
+                  final messenger = ScaffoldMessenger.of(context);
+                  await Clipboard.setData(
+                    const ClipboardData(text: kShizukuNetdiskPw),
+                  );
+                  if (!context.mounted) return;
+                  messenger.showSnackBar(
+                    SnackBar(
+                      content: Text('提取码 $kShizukuNetdiskPw 已复制，粘贴到蓝奏云即可'),
+                    ),
+                  );
+                  await launchUrl(
+                    Uri.parse(kShizukuLanzouUrl),
+                    mode: LaunchMode.externalApplication,
+                  );
+                },
+              ),
+              ActionChip(
+                avatar: const Icon(Icons.cloud_outlined, size: 14),
+                label: const Text('银盘', style: TextStyle(fontSize: 12)),
+                onPressed: () => launchUrl(
+                  Uri.parse(kShizukuPan2Url),
                   mode: LaunchMode.externalApplication,
                 ),
               ),

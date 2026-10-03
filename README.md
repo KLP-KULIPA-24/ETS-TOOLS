@@ -160,14 +160,22 @@ adb pull /storage/emulated/0/Android/data/com.ets100.secondary/files/Download/ET
 ### 版本号（App「检查更新」的取值来源）
 
 App 启动时会（设置 → 关于 里可关）请求官网读取版本号，与本地 `kAppVersion`
-（`lib/services/settings_service.dart`，当前 `0.8`）比对：
+（`lib/services/settings_service.dart`，当前 `0.8.1`）比对：
 
 1. 优先读 `https://klp-kulipa-24.github.io/ETS-TOOLS/version.json`——**发版时改这一个文件最省事**；
-2. 取不到就回退：抓官网首页，读 `class="nav-ver"` / `class="foot-ver"` 里的 `V0.8`。
+2. 取不到就回退：抓官网首页，读 `class="nav-ver"` / `class="foot-ver"` 里的 `V0.8.1`。
 
-所以发新版本时三处一起改：`docs/version.json` 的 `version`、`docs/index.html` 的 `V0.8`（nav-ver / foot-ver）、
-App 里的 `kAppVersion`。比较按整数逐段（`0.10 > 0.9`），`0.8` 与 `0.8.0` 视为同一版本；
-App 只请求 `https://klp-kulipa-24.github.io` 这一个主机。
+所以**发新版本时要一起改这五处**：`pubspec.yaml` 的 `version:`、`lib/services/settings_service.dart` 的 `kAppVersion`、
+`windows/installer.iss` 的 `MyAppVersion`、`docs/version.json` 的 `version`、`docs/index.html` 的 `V0.8.x`（nav-ver / foot-ver）。
+比较按整数逐段（`0.10 > 0.9`），`0.8` 与 `0.8.0` 视为同一版本；App 只请求 `https://klp-kulipa-24.github.io` 这一个主机。
+
+### 下载渠道与制品名
+
+网页与 App 都按四个渠道给下载入口：**蓝奏云**（提取码 `ets`）/ **银盘** / **GitHub 解析下载**（前缀见下）/ **GitHub 原版下载**。
+出包脚本的产物名与 Release 资产名一致（`ETS-TOOLS-Setup-<版本>-x64.exe` / `ETS-TOOLS-<版本>-win.zip` /
+`ETS-TOOLS-Android-<版本>.apk`），**拖进 Release 不用再手动改名**；网页里的 GitHub 直链走
+`releases/latest/download/<资产名>`，所以发版时资产名保持这个格式即可（发布时不要勾"预发行版"）。
+加速解析前缀在网页 `docs/index.html` 的 `MIRROR` 与 App 的 `kShizukuMirrorUrl` 两处，需保持一致。
 
 ## 免责声明
 

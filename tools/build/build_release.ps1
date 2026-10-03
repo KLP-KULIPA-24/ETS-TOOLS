@@ -64,7 +64,8 @@ Run 'flutter' @('build', 'windows', '--release') 'Windows 构建'
 Step 4 7 '打包 绿色便携版'
 New-Item -ItemType Directory -Force -Path $PORTABLE_DIR | Out-Null
 $releaseDir = Join-Path $root 'build\windows\x64\runner\Release'
-$zipPath = Join-Path $PORTABLE_DIR "E听说助手-$ver-绿色便携版.zip"
+# 产物名与 GitHub Release 的资产名保持一致（ETS-TOOLS-*），拖上去不用再手动改名
+$zipPath = Join-Path $PORTABLE_DIR "ETS-TOOLS-$ver-win.zip"
 if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
 Compress-Archive -Path (Join-Path $releaseDir '*') -DestinationPath $zipPath -Force
 if (-not (Test-Path $zipPath)) { Die '便携版 zip 未生成' }
@@ -97,7 +98,7 @@ Run 'flutter' @('build', 'apk', '--release', '--target-platform', 'android-arm64
 $apkSrc = Join-Path $root 'build\app\outputs\flutter-apk\app-release.apk'
 if (-not (Test-Path $apkSrc)) { Die 'APK 未生成' }
 New-Item -ItemType Directory -Force -Path $APK_DIR | Out-Null
-Copy-Item $apkSrc (Join-Path $APK_DIR "E听说助手-$ver.apk") -Force
+Copy-Item $apkSrc (Join-Path $APK_DIR "ETS-TOOLS-Android-$ver.apk") -Force
 Write-Host '      APK 已生成（装手机）' -ForegroundColor DarkGray
 
 Write-Host ''

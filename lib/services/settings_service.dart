@@ -28,12 +28,15 @@ const kAiProviderPresets = <(String, String)>[
 /// Agnes 平台（免费领取 API Key 的入口）
 const kAgnesLoginUrl = 'https://platform.agnes-ai.cn/';
 
-/// Shizuku 下载：原版直链与加速解析（v13.6.0 官方 release APK）
-/// 加速前缀要与网页 `docs/index.html` 里的 MIRROR 常量保持一致
+/// Shizuku 下载四通道（与网页的下载弹层同一套）：
+/// 蓝奏云 / 银盘（网盘，提取码 ets）/ 解析下载（加速前缀，须与网页 docs/index.html 的 MIRROR 一致）/ 官方直链
 const kShizukuApkUrl =
     'https://github.com/RikkaApps/Shizuku/releases/download/v13.6.0/shizuku-v13.6.0.r1086.2650830c-release.apk';
 const kShizukuMirrorUrl =
     'https://gh.b52m.cn/https://github.com/RikkaApps/Shizuku/releases/download/v13.6.0/shizuku-v13.6.0.r1086.2650830c-release.apk';
+const kShizukuLanzouUrl = 'https://wwblv.lanzoul.com/idVxv4asjhdc';
+const kShizukuPan2Url = 'https://silver.yukaidi.com/s/xxr5tE';
+const kShizukuNetdiskPw = 'ets'; // 蓝奏云提取码
 
 /// 地区级联：省 → 市（全国 34 省级 + 349 个地级行政区全量）
 const kRegionMap = kRegionFull;
@@ -44,9 +47,9 @@ const kAgnesPresetName = 'Agnes提供商';
 const kGithubRepoUrl = 'https://github.com/KLP-KULIPA-24/ETS-TOOLS';
 const kGithubRepoLabel = 'github.com/KLP-KULIPA-24/ETS-TOOLS';
 
-/// 对外版本号（固定 0.8，只递增 pubspec 的 build 号）。
-/// 改这里时同步：pubspec.yaml / windows/installer.iss / 网页 V0.8 / web/docs/version.json
-const kAppVersion = '0.8';
+/// 对外版本号（当前 0.8.1）。
+/// 改这里时同步：pubspec.yaml / windows/installer.iss / 网页 V0.8.1 / docs/version.json
+const kAppVersion = '0.8.1';
 
 /// AI 服务提供商
 class AiProvider {

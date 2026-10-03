@@ -4,8 +4,9 @@
 
 规则：
 
-- 对外版本号固定 `0.8`，只递增 `pubspec.yaml` 的构建号（`0.8.0+N`，覆盖安装用）——
-  改版本号时同步：`CHANGELOG.md`、本目录的版本文件、`lib/services/settings_service.dart` 的 `kAppVersion`、
-  `windows/installer.iss`、以及网页的 `docs/version.json` + `docs/index.html` 的 `V0.8` 标记。
-- 出包后把 `产物/` 里的三个安装包（Windows 安装版 / 绿色便携版 / 安卓 APK）拖进 GitHub Release 附件。
+- 对外的版本号按 `0.8.1` / `0.8.2` … 递增，`pubspec.yaml` 的构建号（`0.8.x+N`）继续递增用于覆盖安装——
+  改版本号时同步五处：`pubspec.yaml`、`lib/services/settings_service.dart` 的 `kAppVersion`、
+  `windows/installer.iss` 的 `MyAppVersion`、`docs/version.json`、`docs/index.html` 的 `V0.8.x`（nav-ver / foot-ver）。
+- 出包后把 `产物/` 里的三个安装包（`ETS-TOOLS-Setup-*.exe` / `ETS-TOOLS-*-win.zip` / `ETS-TOOLS-Android-*.apk`）
+  拖进 GitHub Release 附件——名字已经和网页直链一致，不用改；发布时别勾"预发行版"。
 - `CHANGELOG.md` 是给仓库看的总账，本目录是给「每个 Release 页面」看的单版本说明，两者内容可以重叠。
