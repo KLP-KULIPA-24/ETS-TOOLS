@@ -11,16 +11,15 @@ AI 功能仅在用户自行配置接口后由用户主动触发。仅供学习�
 | 功能 | 说明 |
 | --- | --- |
 | 作业列表 | 递归扫描 ETS 数据目录，按"文件夹名（数字）- 标题 - 类别"收纳，同类多条折叠为文件夹；单词组进入单词本页（可隐藏释义自测） |
-| 答案查看 | 五种题型专属渲染：单词跟读 / 朗读短文 / 三问五答 / 看图说话 / 对话跟读；背题模式一键隐藏全部答案 |
+| 答案查看 | 五种题型专属渲染：模仿朗读 / 角色扮演 / 故事复述 / 对话跟读 / 单词跟读；背题模式一键隐藏全部答案 |
 | 标题三级策略 | ① 模板提取（paper.Jason `tz_mc`、`topic`、`read_title`）→ ② 自适应匹配 → ③ AI 智能匹配 |
 | 精听播放 | 倍速 0.6x–2.0x、A-B 循环；逐句按 `begintime~endtime` 区间播放 |
-| 多提供商 AI | 任意 OpenAI 兼容接口；每个提供商可配多个模型；模型支持**思考开关 + 思考级别（低/中/高）**与**多模态（图片输入）**；流式输出 |
+| 多提供商 AI | 任意 OpenAI 兼容接口；每个提供商可配多个模型；模型支持**思考档位**（Agnes 出厂只有关/开，其他模型默认低/中/高，可自定义到超高/最高）与**多模态（图片输入）**；流式输出 |
 | AI 实时对话 | 详情页"AI 对话"入口，多轮流式对话，可附图片，历史持久化 |
 | AI 智能排版 | 智能解析 / 全文翻译 / AI 标题 / 未知题型 AI 自适应识别，结果缓存 |
 | 模拟考场 | 按 ctrl 流程复现考试：播放→倒计时→录音→回放，支持中途跳过 |
-| Android 悬浮窗 | 折叠为圆形 Logo，点击展开：答案速览 / 播放控制 / AI 实时快问 |
-| Windows 悬浮窗 | 一键切换悬浮模式：主窗口变无边框置顶小圆，展开玻璃面板（同上），可拖动 |
-| 修改栏（预留） | 抓包拦截 → 自动改写（成绩/时间测试）的配置骨架：监听端口、拦截规则、HTTPS 证书指引；拦截引擎待抓包数据接入 |
+| Android 悬浮窗 | 折叠为圆形 Logo，点击展开：答案速览 / 播放控制 / AI 实时快问（仅安卓；Windows 端已下线该功能，用窗口置顶/托盘代替） |
+| 修改栏 | 本地拦截引擎接管作业提交：PAC（仅拦截 E听说 域名，Windows）/ 全流量（安卓）两种接入模式，按规则改写**成绩**与**完成时间**；HTTPS 证书一键安装，数据不出本机 |
 | 软件风格 | 默认 Material 3 风格 / **iOS 26 玻璃模糊风格**一键切换；主题色板 + 色相滑条自定义颜色；深浅色 |
 
 ## 数据目录
@@ -34,15 +33,17 @@ AI 功能仅在用户自行配置接口后由用户主动触发。仅供学习�
 ### Android 11+ 读不了 Android/data？（重要）
 
 Android 11+ 限制读取**其他应用**的 `Android/data` 目录，即使授予"所有文件访问"也不行。
-APP 内置了提权提取通道（设置 → 数据目录 → 数据提取）：
+APP 内置四种提取通道（设置 → 数据目录 →「选择工作授权模式」，勾选已就绪的通道 →「用 X 开始提取」）：
 
 | 通道 | 适用 | 步骤 |
 | --- | --- | --- |
-| **Root**（libsu） | Mumu 模拟器、已 root 真机 | Mumu 设置 → 其他设置 → 开启 ROOT，回到本 APP 点"一键提取作业数据" |
-| **Shizuku** | 免 root 真机 | 安装 Shizuku → 开发者选项打开无线调试 → Shizuku 配对启动 → 回本 APP 点"授权 Shizuku"→"一键提取" |
+| **Shizuku** | 免 root 真机（最稳） | 安装 Shizuku → 开发者选项打开无线调试 → Shizuku 配对启动 → 回本 APP 点授权 → 开始提取 |
+| **Root**（libsu） | Mumu 模拟器、已 root 真机 | Mumu 设置 → 其他设置 → 开启 ROOT，回本 APP 直接选 Root 提取 |
+| **直读**（零提权） | 部分机型 / 模拟器可直接读 `Android/data` | 无需授权，选中即提取 |
+| **SAF**（系统授权） | 系统文件选择器兜底 | 点右侧按钮选择 E听说 的 `resource` 目录授予访问，再提取 |
 
 提取会把 E听说 数据拷贝到本应用私有目录（`Android/data/com.eets.e_ets_helper/files/ets_data`），
-之后扫描、精听、悬浮窗全部正常，且每次 E听说 重新下载作业后再点一次提取即可同步。
+之后扫描、精听、安卓悬浮窗全部正常；每次 E听说 重新下载作业后，回作业页点一次「刷新」即可同步。
 
 不使用提取时，也可以在电脑上用 adb 直接拷出数据再手动复制到手机：
 ```bash
@@ -58,9 +59,9 @@ adb pull /storage/emulated/0/Android/data/com.ets100.secondary/files/Download/ET
 | collector | 说明 | 答案来源 |
 | --- | --- | --- |
 | `collector.word` | 单词跟读 | `value` + `translate` |
-| `collector.read` | 朗读短文 | 原文 + `videotime` 逐句时间轴 |
-| `collector.3q5a` | 三问五答 | `answer` + `std[]` + `keywords` 评分关键词 |
-| `collector.picture` | 看图说话 | `std[]` 范文 + `keypoint` 要点 |
+| `collector.read` | 模仿朗读 | 原文 + `videotime` 逐句时间轴 |
+| `collector.3q5a` | 角色扮演 | `answer` + `std[]` + `keywords` 评分关键词 |
+| `collector.picture` | 故事复述 | `std[]` 范文 + `keypoint` 要点 |
 | `collector.repeat_dialogue` | 对话跟读（同步课文） | `sublist[]` 逐句原文/翻译/角色/时间轴 |
 | 未知 | 通用渲染 + AI 自适应识别 | AI |
 
@@ -119,10 +120,10 @@ adb pull /storage/emulated/0/Android/data/com.ets100.secondary/files/Download/ET
 | `assets/` `pubspec.yaml` `pubspec.lock` `analysis_options.yaml` | 资源与依赖锁定 |
 | `tools/` `docs/` | 构建脚本、设计规范（`docs/style-pack/`）与架构文档 |
 | `web/docs/` | 项目主页（Pages 发布的就是它）：`index.html`、`version.json`（App「检查更新」读的版本号）、`media/`（宣传视频与海报）、`assets/`、`vendor/` |
-| `web/docs/` | 项目主页（Pages 发布的源，仓库里对应 `docs/`）：`index.html`、`version.json`、`media/`、`assets/`、`vendor/` |
-| `README.md` `CHANGELOG.md` `LICENSE` | 说明、**发行说明**与许可证（MIT，`Copyright (c) 2026 苦力怕.KULIPA`） |
+| `docs/` | **网页源 + Pages 发布目录**：`index.html`、`version.json`、`media/`（宣传视频与海报）、`assets/`、`vendor/`，以及设计文档（`ARCHITECTURE.md`、`style-pack/`） |
+| `README.md` `CHANGELOG.md` `LICENSE` `发行日志/` | 说明、发行说明、许可证（MIT）与每个版本的 Release 正文 |
 
-> `web/promo/`（宣传片制作页）与 `web/README.md` 不入仓、不上传——**已弃用**，需要时从历史提交或本地备份取。
+> `web/promo/`、`web/README.md` 不入仓、不上传——**已弃用**；`web/docs/` 也不入仓（本机历史拷贝，仓库 `docs/` 才是网页源）。
 
 > 用网页拖拽上传时 `.gitignore` **不会生效**，务必别把 `android/key.properties`、`android/app/*.jks`
 > 和 `build/`、`产物/`、`TX.png` 一起拖进去；用 `git init` + push 则自动按 `.gitignore` 排除。
@@ -149,13 +150,12 @@ adb pull /storage/emulated/0/Android/data/com.ets100.secondary/files/Download/ET
 
 ### 展示页上线（GitHub Pages）
 
-本地网页在 `web/docs/`，**仓库里发布的是根目录 `docs/`**（Pages 的源），更新时把 `web/docs/` 的内容同步过去
-（保持 `index.html` 与 `media/`、`assets/`、`vendor/` 的相对层级——`index.html` 引用的是 `./media/E听说宣传视频.mp4` 等相对路径）：
+**网页源就是仓库根目录 `docs/`**（Pages 的源），直接改这里提交即可；保持 `index.html` 与 `media/`、`assets/`、
+`vendor/` 的相对层级——`index.html` 里引用的是 `./media/E听说宣传视频.mp4` 等相对路径。
 
-- 仓库 Settings → Pages → Source 选 `main` 分支 + `/docs` 目录；
-- 改完网页：`cp -r web/docs/. docs/`（会把 `index.html` 一起更新，设计文档仍留在 `docs/`）→ 提交。
-
-保存后等 1~2 分钟生效。
+- 仓库 Settings → Pages → Source 选 `main` 分支 + `/docs` 目录，保存后过 1~2 分钟生效；
+- 本机 `web/docs/` 是历史遗留的另一份拷贝（**不入仓、已进 .gitignore**）：以后改网页只改仓库 `docs/`，
+  或者改完手动 `cp -r web/docs/. docs/` 同步，别再让两份各自漂移。
 
 ### 版本号（App「检查更新」的取值来源）
 

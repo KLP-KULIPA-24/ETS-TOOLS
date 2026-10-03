@@ -56,8 +56,7 @@ E:\EtsHelper\
 | `lib/pages/modify/` | 修改域：抓包拦截配置、成绩/完成时间规则 |
 | `lib/pages/settings/` | 设置域：设置、关于、教程、成就页 |
 | `lib/pages/detail/` | 作业详情域：五类题型渲染、AI 面板 |
-| `lib/pages/floating/` | 悬浮窗页（Windows 悬浮模式 / Android 悬浮层） |
-| `lib/overlay_main.dart` | Android 悬浮层独立入口 |
+| `lib/overlay_main.dart` | Android 悬浮层独立入口（Windows 端没有悬浮窗） |
 
 ## 约定
 

@@ -76,3 +76,6 @@ tools/promo-reel/assets/fonts/
 # 已弃用（用户 2026-10-03 明确不要；不入仓、不上传）
 web/promo/
 web/README.md
+
+# 已不入仓（仓库 docs/ 就是网页源；web/docs 是本机历史副本）
+web/docs/
