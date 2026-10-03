@@ -182,6 +182,8 @@ section { max-width: 1120px; margin: 0 auto; padding: 0 var(--s4); }
   }
   .nav-links::-webkit-scrollbar { display: none; }
   .nav-links a { font-size: 12px; padding: 8px 12px; white-space: nowrap; flex: 0 0 auto; }
+  /* 手机端不显示导航里的 GitHub 按钮：宽度不够会被右边缘截断 */
+  .nav-links a.nav-gh { display: none; }
   .nav-ver { display: none; }
   .brand span { display: none; }
 }
@@ -1154,25 +1156,24 @@ html.theming, html.theming *, html.theming *::before, html.theming *::after {
         </div>
       </div>
       <div class="dl-grid">
-        <!-- TODO 替换 href 为真实链接 -->
-        <a class="dl-card" id="dlLan" href="#" title="点击跳转并自动复制提取码 ets">
+        <a class="dl-card" href="#" id="dlLan" data-chan="lanzou" title="选择要下载的版本（提取码 ets，点击自动复制）">
           <div class="top"><svg class="ic"><use href="#i-cloud"/></svg><h3>蓝奏云</h3><span class="dl-pri">首选</span></div>
           <p class="meta">国内直连 · 提取码 ets（点击自动复制）</p>
           <span class="go">前往下载 <svg class="ic" style="width:16px;height:16px"><use href="#i-download"/></svg></span>
         </a>
-        <a class="dl-card" id="dlPan2" href="#" title="银盘（网盘2），链接待补充">
+        <a class="dl-card" href="#" id="dlPan2" data-chan="pan2" title="选择要下载的版本（无密码）">
           <div class="top"><svg class="ic"><use href="#i-drive"/></svg><h3>银盘</h3><span class="dl-pri alt">备选</span></div>
-          <p class="meta">国内直连 · 稳定备用</p>
+          <p class="meta">国内直连 · 无密码</p>
           <span class="go">前往下载 <svg class="ic" style="width:16px;height:16px"><use href="#i-download"/></svg></span>
         </a>
-        <a class="dl-card" href="#">
-          <div class="top"><svg class="ic"><use href="#i-link"/></svg><h3>GitHub 解析下载</h3><span class="dl-pri alt">次选</span></div>
-          <p class="meta">第三方节点中转</p>
+        <a class="dl-card" href="#" data-chan="parse" title="选择要下载的版本">
+          <div class="top"><svg class="ic"><use href="#i-link"/></svg><h3>GitHub 解析下载</h3><span class="dl-pri">推荐</span></div>
+          <p class="meta">第三方节点中转 · 国内直连更快</p>
           <span class="go">前往下载 <svg class="ic" style="width:16px;height:16px"><use href="#i-download"/></svg></span>
         </a>
-        <a class="dl-card" href="https://github.com/KLP-KULIPA-24/ETS-TOOLS/releases" target="_blank" rel="noopener">
-          <div class="top"><svg class="ic"><use href="#i-repo"/></svg><h3>GitHub 直接下载</h3><span class="dl-pri alt">兜底</span></div>
-          <p class="meta">官方 Releases</p>
+        <a class="dl-card" href="#" data-chan="direct" title="选择要下载的版本">
+          <div class="top"><svg class="ic"><use href="#i-repo"/></svg><h3>GitHub 原版下载</h3><span class="dl-pri alt">官方</span></div>
+          <p class="meta">官方 Releases 直链</p>
           <span class="go">前往下载 <svg class="ic" style="width:16px;height:16px"><use href="#i-download"/></svg></span>
         </a>
       </div>
@@ -1186,12 +1187,12 @@ html.theming, html.theming *, html.theming *::before, html.theming *::after {
           <div class="file-row">
             <div><div class="nm">Windows 安装版</div><div class="sz">Setup 安装包，一键安装</div></div>
             <div class="os-tags"><span class="os">x64</span></div>
-            <a class="btn btn-g btn-sm" href="#">下载</a>
+            <a class="btn btn-g btn-sm" href="#" data-file="setup">下载</a>
           </div>
           <div class="file-row">
             <div><div class="nm">Windows 便携版</div><div class="sz">解压即用，不写注册表</div></div>
             <div class="os-tags"><span class="os">x64</span><span class="os">免安装</span></div>
-            <a class="btn btn-g btn-sm" href="#">下载</a>
+            <a class="btn btn-g btn-sm" href="#" data-file="win">下载</a>
           </div>
         </div>
         <div class="dl-col" id="dlMb">
@@ -1202,12 +1203,12 @@ html.theming, html.theming *, html.theming *::before, html.theming *::after {
           <div class="file-row">
             <div><div class="nm">Android 安装包</div><div class="sz">APK，手机直接安装</div></div>
             <div class="os-tags"><span class="os">APK</span></div>
-            <a class="btn btn-g btn-sm" href="#">下载</a>
+            <a class="btn btn-g btn-sm" href="#" data-file="apk">下载</a>
           </div>
           <div class="file-row">
             <div><div class="nm">Android 提权工具</div><div class="sz">Shizuku，免 Root 读取数据</div></div>
             <div class="os-tags"><span class="os">APK</span></div>
-            <a class="btn btn-g btn-sm" href="https://gh.xmly.dev/https://github.com/RikkaApps/Shizuku/releases/download/v13.6.0/shizuku-v13.6.0.r1086.2650830c-release.apk" target="_blank" rel="noopener">下载</a>
+            <a class="btn btn-g btn-sm" href="#" data-file="shizuku">下载</a>
           </div>
         </div>
       </div>
@@ -1342,8 +1343,8 @@ html.theming, html.theming *, html.theming *::before, html.theming *::after {
           <h3>四种读取方式 <span class="svc-badge">Android 数据</span></h3>
           <p>Shizuku / Root / 直读 / SAF —— 四种通道适配各种机型与权限条件，总有一条能走；Shizuku 免 Root 真机最稳，软件内同样提供下载入口。</p>
           <div class="svc-links">
+            <a class="btn btn-p btn-sm" href="https://gh.xmly.dev/https://github.com/RikkaApps/Shizuku/releases/download/v13.6.0/shizuku-v13.6.0.r1086.2650830c-release.apk" target="_blank" rel="noopener">解析下载 · 推荐</a>
             <a class="btn btn-g btn-sm" href="https://github.com/RikkaApps/Shizuku/releases/download/v13.6.0/shizuku-v13.6.0.r1086.2650830c-release.apk" target="_blank" rel="noopener">原版下载</a>
-            <a class="btn btn-g btn-sm" href="https://gh.xmly.dev/https://github.com/RikkaApps/Shizuku/releases/download/v13.6.0/shizuku-v13.6.0.r1086.2650830c-release.apk" target="_blank" rel="noopener">国内镜像</a>
           </div>
         </div>
       </article>
@@ -1677,43 +1678,132 @@ html.theming, html.theming *, html.theming *::before, html.theming *::after {
     }
     function hidePreview() { if (pvBox) pvBox.classList.remove('show'); }
 
-    /* ---------- 下载渠道弹层（dlSheet 在本脚本之后才解析，脚本执行时还是 null——DOMContentLoaded 兜底绑定） ---------- */
+    /* ---------- 下载弹层：两种入口共用一个 sheet ----------
+       渠道卡「前往下载」→ 列 3 个版本（该渠道自己的链接）
+       平台行「下载」    → 列 4 个渠道（都指向这一个文件）
+       （dlSheet 在本脚本之后才解析，脚本执行时还是 null → DOMContentLoaded 兜底绑定） ---------- */
+    var REL_BASE = 'https://github.com/KLP-KULIPA-24/ETS-TOOLS/releases/download/V0.8/';
+    var MIRROR = 'https://gh.xmly.dev/';
+    var DL_FILES = [
+      { k: 'setup', nm: 'Windows 安装版', sz: 'ETS-TOOLS-Setup-0.8.0-x64.exe', ic: 'i-window' },
+      { k: 'win', nm: 'Windows 绿色便携版', sz: 'ETS-TOOLS-0.8.0-win.zip', ic: 'i-window' },
+      { k: 'apk', nm: 'Android 安装包', sz: 'ETS-TOOLS-Android-0.8.0.apk', ic: 'i-android' }
+    ];
+    var DL_CHANS = [
+      { k: 'lanzou', nm: '蓝奏云', ic: 'i-cloud', badge: '首选', alt: false,
+        desc: '国内直连 · 提取码 ets（点击自动复制）',
+        pw: { setup: 'ets', win: '', apk: 'ets' },
+        url: { setup: 'https://wwblv.lanzoul.com/iAtCC4asd23g',
+               win: 'https://wwblv.lanzoul.com/iTayy4asd4vg',
+               apk: 'https://wwblv.lanzoul.com/iK86R4asdhpi' } },
+      { k: 'pan2', nm: '银盘', ic: 'i-drive', badge: '备选', alt: true,
+        desc: '国内直连 · 无密码',
+        url: { setup: 'https://silver.yukaidi.com/s/YWPkSJ',
+               win: 'https://silver.yukaidi.com/s/AWl3sJ',
+               apk: 'https://silver.yukaidi.com/s/9Y6OtG' } },
+      { k: 'parse', nm: 'GitHub 解析下载', ic: 'i-link', badge: '推荐', alt: false,
+        desc: '第三方节点中转 · 国内直连更快',
+        url: { setup: MIRROR + REL_BASE + 'ETS-TOOLS-Setup-0.8.0-x64.exe',
+               win: MIRROR + REL_BASE + 'ETS-TOOLS-0.8.0-win.zip',
+               apk: MIRROR + REL_BASE + 'ETS-TOOLS-Android-0.8.0.apk' } },
+      { k: 'direct', nm: 'GitHub 原版下载', ic: 'i-repo', badge: '官方', alt: true,
+        desc: '官方 Releases 直链',
+        url: { setup: REL_BASE + 'ETS-TOOLS-Setup-0.8.0-x64.exe',
+               win: REL_BASE + 'ETS-TOOLS-0.8.0-win.zip',
+               apk: REL_BASE + 'ETS-TOOLS-Android-0.8.0.apk' } }
+    ];
+    var SHIZUKU_REL = 'https://github.com/RikkaApps/Shizuku/releases/download/v13.6.0/shizuku-v13.6.0.r1086.2650830c-release.apk';
+    var SHIZUKU_CHANS = [
+      { k: 'parse', nm: '解析下载', ic: 'i-link', badge: '推荐', alt: false,
+        desc: '第三方节点中转', url: MIRROR + SHIZUKU_REL },
+      { k: 'direct', nm: '原版下载', ic: 'i-repo', badge: '官方', alt: true,
+        desc: '官方 Releases 直链', url: SHIZUKU_REL }
+    ];
+    function dlCopy(t) {
+      if (!t) return;
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(t).catch(function () {});
+        return;
+      }
+      var ta = document.createElement('textarea');
+      ta.value = t;
+      ta.style.cssText = 'position:fixed;opacity:0';
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); } catch (e) {}
+      ta.remove();
+    }
+    function dlRow(ic, nm, desc, badge, alt, attrs) {
+      return '<button class="dl-chan" type="button" ' + attrs + '>' +
+        '<span class="dl-chan-ic"><svg class="ic"><use href="#' + ic + '"/></svg></span>' +
+        '<span class="dl-chan-tx"><b>' + nm + '</b><i>' + desc + '</i></span>' +
+        '<span class="dl-chan-pri' + (alt ? ' alt' : '') + '">' + badge + '</span>' +
+        '</button>';
+    }
     function initDlSheet() {
       var dlSheet = document.getElementById('dlSheet');
       if (!dlSheet || dlSheet.dataset.bound) return;
       dlSheet.dataset.bound = '1';
       var dlSheetX = document.getElementById('dlSheetX');
+      var dlSheetT = document.getElementById('dlSheetT');
+      var dlSheetBody = document.getElementById('dlSheetBody');
+      function close() { dlSheet.hidden = true; }
+      /* 渠道优先：列三个版本 */
+      function showVersions(chanK) {
+        var ch = DL_CHANS.filter(function (c) { return c.k === chanK; })[0];
+        if (!ch) return;
+        dlSheetT.textContent = '选择要下载的版本 · ' + ch.nm;
+        dlSheetBody.innerHTML = DL_FILES.map(function (f) {
+          var pw = ch.pw && ch.pw[f.k] !== undefined ? ch.pw[f.k] : null;
+          var badge = pw === null ? '无密码' : (pw ? '提取码 ' + pw : '无密码');
+          var attrs = 'data-goto="' + ch.url[f.k] + '"' + (pw ? ' data-pw="' + pw + '"' : '');
+          return dlRow(f.ic, f.nm, f.sz, badge, pw === '', attrs);
+        }).join('');
+        dlSheet.hidden = false;
+      }
+      /* 文件优先：列四个渠道 */
+      function showChannels(fileK) {
+        if (fileK === 'shizuku') {
+          dlSheetT.textContent = 'Shizuku · 选择下载方式';
+          dlSheetBody.innerHTML = SHIZUKU_CHANS.map(function (c) {
+            return dlRow(c.ic, c.nm, c.desc, c.badge, c.alt, 'data-goto="' + c.url + '"');
+          }).join('');
+          dlSheet.hidden = false;
+          return;
+        }
+        var f = DL_FILES.filter(function (x) { return x.k === fileK; })[0];
+        if (!f) return;
+        dlSheetT.textContent = '选择下载方式 · ' + f.nm;
+        dlSheetBody.innerHTML = DL_CHANS.map(function (c) {
+          var pw = c.pw && c.pw[f.k] ? c.pw[f.k] : null;
+          var attrs = 'data-goto="' + c.url[f.k] + '"' + (pw ? ' data-pw="' + pw + '"' : '');
+          return dlRow(c.ic, c.nm, c.desc, c.badge, c.alt, attrs);
+        }).join('');
+        dlSheet.hidden = false;
+      }
       Array.prototype.forEach.call(document.querySelectorAll('.dl-col .file-row .btn'), function (b) {
         b.addEventListener('click', function (e) {
           e.preventDefault();
-          dlSheet.hidden = false;
+          showChannels(b.dataset.file || 'setup');
         });
       });
-      dlSheetX.addEventListener('click', function () { dlSheet.hidden = true; });
+      Array.prototype.forEach.call(document.querySelectorAll('.dl-grid .dl-card[data-chan]'), function (c) {
+        c.addEventListener('click', function (e) {
+          e.preventDefault();
+          showVersions(c.dataset.chan);
+        });
+      });
+      dlSheetX.addEventListener('click', close);
       dlSheet.addEventListener('click', function (e) {
-        if (e.target === dlSheet) { dlSheet.hidden = true; return; }
-        var ch = e.target.closest ? e.target.closest('.dl-chan') : null;
-        if (ch) {
-          if (ch.dataset.chan === 'lanzou') {
-            var code = 'ets';
-            if (navigator.clipboard && window.isSecureContext) {
-              navigator.clipboard.writeText(code).catch(function () {});
-            } else {
-              var ta = document.createElement('textarea');
-              ta.value = code;
-              ta.style.cssText = 'position:fixed;opacity:0';
-              document.body.appendChild(ta);
-              ta.select();
-              try { document.execCommand('copy'); } catch (e2) {}
-              ta.remove();
-            }
-          }
-          // 其余渠道（银盘/解析/直连）链接待补充：先关闭弹层
-          dlSheet.hidden = true;
-        }
+        if (e.target === dlSheet) { close(); return; }
+        var row = e.target.closest ? e.target.closest('.dl-chan[data-goto]') : null;
+        if (!row) return;
+        if (row.dataset.pw) dlCopy(row.dataset.pw);
+        if (row.dataset.goto) window.open(row.dataset.goto, '_blank', 'noopener');
+        close();
       });
       addEventListener('keydown', function (e) {
-        if (e.key === 'Escape' && !dlSheet.hidden) dlSheet.hidden = true;
+        if (e.key === 'Escape' && !dlSheet.hidden) close();
       });
     }
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initDlSheet);
@@ -1938,29 +2028,10 @@ themeHooks.push(function () {
 <div class="dl-sheet" id="dlSheet" hidden>
   <div class="dl-sheet-card" role="dialog" aria-label="选择下载方式">
     <div class="dl-sheet-hd">
-      <span class="dl-sheet-t">选择下载方式</span>
+      <span class="dl-sheet-t" id="dlSheetT">选择下载方式</span>
       <button class="dl-sheet-x" id="dlSheetX" type="button" aria-label="关闭">×</button>
     </div>
-    <button class="dl-chan" data-chan="lanzou" type="button">
-      <span class="dl-chan-ic"><svg class="ic"><use href="#i-cloud"/></svg></span>
-      <span class="dl-chan-tx"><b>蓝奏云</b><i>国内直连 · 提取码 ets（点击自动复制）</i></span>
-      <span class="dl-chan-pri">首选</span>
-    </button>
-    <button class="dl-chan" data-chan="pan2" type="button">
-      <span class="dl-chan-ic"><svg class="ic"><use href="#i-drive"/></svg></span>
-      <span class="dl-chan-tx"><b>银盘</b><i>国内直连 · 稳定备用</i></span>
-      <span class="dl-chan-pri alt">备选</span>
-    </button>
-    <button class="dl-chan" data-chan="parse" type="button">
-      <span class="dl-chan-ic"><svg class="ic"><use href="#i-link"/></svg></span>
-      <span class="dl-chan-tx"><b>GitHub 解析下载</b><i>第三方节点中转</i></span>
-      <span class="dl-chan-pri alt">次选</span>
-    </button>
-    <button class="dl-chan" data-chan="direct" type="button">
-      <span class="dl-chan-ic"><svg class="ic"><use href="#i-repo"/></svg></span>
-      <span class="dl-chan-tx"><b>GitHub 直接下载</b><i>官方 Releases</i></span>
-      <span class="dl-chan-pri alt">兜底</span>
-    </button>
+    <div id="dlSheetBody"></div>
   </div>
 </div>
 </body>
