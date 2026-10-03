@@ -28,11 +28,12 @@ const kAiProviderPresets = <(String, String)>[
 /// Agnes 平台（免费领取 API Key 的入口）
 const kAgnesLoginUrl = 'https://platform.agnes-ai.cn/';
 
-/// Shizuku 下载：原版直链与国内镜像（v13.6.0 官方 release APK）
+/// Shizuku 下载：原版直链与加速解析（v13.6.0 官方 release APK）
+/// 加速前缀要与网页 `docs/index.html` 里的 MIRROR 常量保持一致
 const kShizukuApkUrl =
     'https://github.com/RikkaApps/Shizuku/releases/download/v13.6.0/shizuku-v13.6.0.r1086.2650830c-release.apk';
 const kShizukuMirrorUrl =
-    'https://gh.xmly.dev/https://github.com/RikkaApps/Shizuku/releases/download/v13.6.0/shizuku-v13.6.0.r1086.2650830c-release.apk';
+    'https://gh.b52m.cn/https://github.com/RikkaApps/Shizuku/releases/download/v13.6.0/shizuku-v13.6.0.r1086.2650830c-release.apk';
 
 /// 地区级联：省 → 市（全国 34 省级 + 349 个地级行政区全量）
 const kRegionMap = kRegionFull;
