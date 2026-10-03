@@ -173,8 +173,11 @@ App 启动时会（设置 → 关于 里可关）请求官网读取版本号，�
 
 网页与 App 都按四个渠道给下载入口：**蓝奏云**（提取码 `ets`）/ **银盘** / **GitHub 解析下载**（前缀见下）/ **GitHub 原版下载**。
 出包脚本的产物名与 Release 资产名一致（`ETS-TOOLS-Setup-<版本>-x64.exe` / `ETS-TOOLS-<版本>-win.zip` /
-`ETS-TOOLS-Android-<版本>.apk`），**拖进 Release 不用再手动改名**；网页里的 GitHub 直链走
-`releases/latest/download/<资产名>`，所以发版时资产名保持这个格式即可（发布时不要勾"预发行版"）。
+`ETS-TOOLS-Android-<版本>.apk`），**拖进 Release 不用再手动改名**。
+
+网页里的 GitHub 直链写在 `docs/index.html` 的 `REL_BASE`（当前 `…/releases/download/V0.8.1/`），
+**发新版时改这一处**，并保证资产名与上面格式一致、tag 用 `V<版本>`（如 `V0.8.1`）。
+网盘（蓝奏云 / 银盘）那六条链接写在同一文件的 `DL_CHANS` 里，换文件重传后要同步更新。
 加速解析前缀在网页 `docs/index.html` 的 `MIRROR` 与 App 的 `kShizukuMirrorUrl` 两处，需保持一致。
 
 ## 免责声明
