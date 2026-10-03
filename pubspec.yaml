@@ -1,0 +1,64 @@
+name: e_ets_helper
+description: "E听说助手：作业答案查看、精听训练、AI 智能解析（Windows + Android）"
+publish_to: 'none'
+version: 0.8.0+9
+
+environment:
+  sdk: ^3.13.4
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+
+  # 状态管理
+  provider: ^6.1.2
+  # 网络与存储
+  http: ^1.2.0
+  shared_preferences: ^2.3.0
+  path_provider: ^2.1.4
+  path: ^1.9.0
+  xml: ^6.5.0
+  intl: ^0.20.0
+  # 音频播放 / 录音
+  just_audio: ^0.10.0
+  just_audio_windows: ^0.2.2
+  audio_session: ^0.2.0
+  record: ^7.1.1
+  # 权限 / 目录选择 / 窗口
+  permission_handler: ^11.3.1
+  file_picker: 8.3.7
+  window_manager: ^0.4.2
+  # Android 悬浮窗
+  flutter_overlay_window: ^0.5.0
+  # AI 输出的 Markdown 渲染
+  markdown_widget: ^2.3.0
+  # 打开作者 GitHub 链接
+  url_launcher: ^6.3.2
+  # 划选朗读（TTS）
+  flutter_tts: ^4.2.1
+  # API Key 加密存储（Win DPAPI / 安卓 Keystore）
+  flutter_secure_storage: ^9.2.4
+  tray_manager: ^0.7.0
+  # 修改模块：本地 HTTPS 代理 CA / 站点证书动态签发（X.509）
+  basic_utils: ^5.7.0
+  media_kit: ^1.2.6
+  media_kit_video: ^2.0.1
+  media_kit_libs_windows_video: ^1.0.11
+  media_kit_libs_android_video: ^1.3.8
+  share_plus: ^12.0.2
+  file_selector: ^1.1.0
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  # 图标生成脚本（tool/gen_icon.dart）
+  image: ^4.5.4
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/TX.png
+    - assets/icon.png
+    - assets/tray/
+    - assets/demo/
