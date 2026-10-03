@@ -1,0 +1,14 @@
+{
+  "name": "ets-remotion-promo",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "render": "remotion render Promo \"out/E听说宣传视频.mp4\" --codec h264 --browser-executable \"C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe\""
+  },
+  "dependencies": {
+    "@remotion/cli": "^4.0.532",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "remotion": "^4.0.532"
+  }
+}
