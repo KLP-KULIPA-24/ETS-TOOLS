@@ -332,6 +332,20 @@ class MainActivity : FlutterActivity() {
                     break
                 }
             }
+            if (n == 0) {
+                // 兜底：系统选择器的授权层级五花八门（可能落在合成层级上，
+                // 固定候选全部落空）——在授权子树里向下搜 com.ets100.secondary
+                val found = findEtsDir(resolver, tree, rootDoc)
+                if (found != null) {
+                    used = found
+                    n = safCopyRec(
+                        resolver,
+                        tree,
+                        DocumentsContract.buildDocumentUriUsingTree(tree, found),
+                        out,
+                    )
+                }
+            }
             mapOf(
                 "ok" to (n > 0),
                 "files" to n,
@@ -342,6 +356,59 @@ class MainActivity : FlutterActivity() {
         } catch (e: Throwable) {
             mapOf("ok" to false, "files" to 0, "msg" to "SAF 拷贝失败：${e.message}")
         }
+    }
+
+    /** 在授权子树里向下找 com.ets100.secondary 目录（限深 3 / 限访问 400，防拖死） */
+    private fun findEtsDir(
+        resolver: ContentResolver,
+        tree: Uri,
+        rootDoc: String,
+    ): String? {
+        var frontier = listOf(rootDoc)
+        var depth = 0
+        var visited = 0
+        while (frontier.isNotEmpty() && depth < 4 && visited < 400) {
+            val next = mutableListOf<String>()
+            for (id in frontier) {
+                if (++visited > 400) return null
+                val childrenUri =
+                    try {
+                        DocumentsContract.buildChildDocumentsUriUsingTree(tree, id)
+                    } catch (_: Throwable) {
+                        continue
+                    }
+                val c =
+                    try {
+                        resolver.query(
+                            childrenUri,
+                            arrayOf(
+                                DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+                                DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+                                DocumentsContract.Document.COLUMN_MIME_TYPE,
+                            ),
+                            null,
+                            null,
+                            null,
+                        )
+                    } catch (_: Throwable) {
+                        null
+                    } ?: continue
+                c.use {
+                    while (it.moveToNext()) {
+                        val cid = it.getString(0) ?: continue
+                        val name = it.getString(1) ?: continue
+                        val mime = it.getString(2)
+                        if (mime == DocumentsContract.Document.MIME_TYPE_DIR) {
+                            if (name == "com.ets100.secondary") return cid
+                            if (depth < 2) next.add(cid)
+                        }
+                    }
+                }
+            }
+            frontier = next
+            depth++
+        }
+        return null
     }
 
     /** 递归遍历 SAF document 拷贝到本地文件系统 */

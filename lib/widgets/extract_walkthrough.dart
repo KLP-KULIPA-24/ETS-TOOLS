@@ -294,11 +294,17 @@ class _ModeCard extends StatelessWidget {
                       style: TextStyle(fontSize: 12, color: cs.outline),
                     ),
                   ),
-                  if (onPrepare != null && !ready)
+                  // 授权按钮常驻：授权状态可能失效（选错层级 / 系统回收授权），
+                  // 已就绪时显示「重新授权」允许重选
+                  if (onPrepare != null)
                     TextButton(
                       onPressed: busy ? null : onPrepare,
                       child: Text(
-                        mode == ExtractMode.shizuku ? '授权 Shizuku' : '授权目录',
+                        !ready
+                            ? (mode == ExtractMode.shizuku
+                                  ? '授权 Shizuku'
+                                  : '授权目录')
+                            : '重新授权',
                         style: const TextStyle(fontSize: 12),
                       ),
                     ),
