@@ -45,10 +45,25 @@ class KtvText extends StatefulWidget {
 class _KtvTextState extends State<KtvText> {
   Timer? _ticker;
   int _active = -1; // 当前句索引；-1 = 未播放
+  // 估算分句（无显式时间轴）实际使用的分句与时长：
+  // 时长未从外部传入时直接取播放器元数据，让所有录音都无需额外接线
+  List<SentenceSeg> _segs = const [];
+  double _psDur = 0;
+
+  void _recomputeSegs(double dur) {
+    if (widget.segments.isNotEmpty) {
+      _segs = widget.segments;
+      return;
+    }
+    _segs = (widget.text != null && dur > 0)
+        ? sentencesByProportion(widget.text!, dur)
+        : const <SentenceSeg>[];
+  }
 
   @override
   void initState() {
     super.initState();
+    _recomputeSegs(widget.durationSec);
     _ticker = Timer.periodic(const Duration(milliseconds: 150), (_) {
       if (!mounted) return;
       final ps = AudioPlayerService.I;
@@ -62,6 +77,15 @@ class _KtvTextState extends State<KtvText> {
       if (!match) {
         if (_active != -1) setState(() => _active = -1);
         return;
+      }
+      // 无显式时间轴：时长直接取播放器元数据（元数据就绪后分句重建一次）
+      if (widget.segments.isEmpty && widget.durationSec <= 0) {
+        final d = ps.duration.inMilliseconds / 1000.0;
+        if ((d - _psDur).abs() > 0.05) {
+          _psDur = d;
+          _recomputeSegs(_psDur);
+          if (mounted) setState(() {});
+        }
       }
       final pos = ps.position.inMilliseconds / 1000.0;
       final idx = _indexAt(pos);
@@ -77,7 +101,7 @@ class _KtvTextState extends State<KtvText> {
 
   /// 当前播放位置对应的句子索引
   int _indexAt(double pos) {
-    final segs = widget.segments;
+    final segs = _segs;
     for (var i = 0; i < segs.length; i++) {
       if (pos >= segs[i].begin && pos < segs[i].end) return i;
     }
@@ -118,11 +142,10 @@ class _KtvTextState extends State<KtvText> {
       );
     }
     // 句子来源：显式时间轴优先；否则按文本分句 + 时长比例分配
-    final segs = widget.segments.isNotEmpty
-        ? widget.segments
-        : (widget.text != null && widget.durationSec > 0)
-        ? sentencesByProportion(widget.text!, widget.durationSec)
-        : const <SentenceSeg>[];
+    _recomputeSegs(
+      widget.durationSec > 0 ? widget.durationSec : _psDur,
+    );
+    final segs = _segs;
     // 完整原文底稿（所有文字与标点都在）——高亮只在其中染色，绝不丢字
     final plain = _plain();
     // 按句在原文里顺序定位 → 染色区间；匹配不到的句子跳过（文字仍在原文里）

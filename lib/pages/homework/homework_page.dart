@@ -465,28 +465,6 @@ class _HomeworkPageState extends State<HomeworkPage> {
                             label: Text('恢复已删除的 ${deleted.length} 项'),
                           ),
                         ),
-                      for (final entry in ds.rootStatus.entries)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 2),
-                          child: Row(
-                            children: [
-                              Icon(
-                                Icons.folder_outlined,
-                                size: 13,
-                                color: cs.outline,
-                              ),
-                              const SizedBox(width: 5),
-                              Expanded(
-                                child: Text(
-                                  '${entry.key} — ${entry.value}',
-                                  style: Theme.of(context).textTheme.labelSmall
-                                      ?.copyWith(color: cs.outline),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
                       const SizedBox(height: 10),
                     ],
                   ),

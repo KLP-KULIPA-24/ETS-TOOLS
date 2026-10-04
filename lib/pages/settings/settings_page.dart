@@ -312,16 +312,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     children: [
                       _cardTitle(context, '数据目录', Icons.folder_outlined),
                       const SizedBox(height: 8),
-                      if (Platform.isWindows)
-                        Text(
-                          '当前主目录：${s.activeRoots.firstOrNull ?? '（未设置）'}',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
                       if (Platform.isAndroid) ...[
-                        Text(
-                          'APP 数据目录：${s.androidRoot}',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
                         const SizedBox(height: 8),
                         Wrap(
                           spacing: 8,

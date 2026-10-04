@@ -134,8 +134,8 @@ class GlassContainer extends StatelessWidget {
                         accent.withValues(alpha: dark ? 0.055 : 0.045),
                         dark
                             // iOS 26 玻璃 = 高度透明：背景色斑要透得过来
-                            ? const Color(0xFF131926).withValues(alpha: 0.26)
-                            : Colors.white.withValues(alpha: 0.34),
+                            ? const Color(0xFF131926).withValues(alpha: 0.20)
+                            : Colors.white.withValues(alpha: 0.24),
                       ),
                   borderRadius: BorderRadius.circular(radius),
                   border:

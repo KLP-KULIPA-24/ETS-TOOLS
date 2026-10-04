@@ -775,7 +775,15 @@ class _TypedContentViewState extends State<TypedContentView> {
             title: '情景原文',
             icon: Icons.subject_rounded,
             children: [
-              EtsTextView(c.text, style: const TextStyle(height: 1.6)),
+              // 播放完整录音时跟读高亮（无时间轴，按时长比例分句）
+              KtvText(
+                text: c.text,
+                audioFile: c.audio.isEmpty ? '' : _materialPath(c.audio),
+                enabled: context.watch<SettingsService>().followHighlight,
+                menuBuilder: selMenuBuilder,
+                baseStyle: const TextStyle(height: 1.6),
+                selectable: true,
+              ),
             ],
           ),
         if (partA.isNotEmpty)
@@ -828,11 +836,21 @@ class _TypedContentViewState extends State<TypedContentView> {
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Expanded(
-              child: SelectableText(
-                c.text,
-                style: theme.textTheme.displaySmall?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
+              // 播放原版发音时整词染色（跟读高亮）
+              child: KtvText(
+                text: c.text,
+                audioFile: c.audio.isEmpty ? '' : _materialPath(c.audio),
+                enabled: context.watch<SettingsService>().followHighlight,
+                menuBuilder: selMenuBuilder,
+                baseStyle:
+                    theme.textTheme.displaySmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ) ??
+                    const TextStyle(
+                      fontSize: 32,
+                      fontWeight: FontWeight.w600,
+                    ),
+                selectable: true,
               ),
             ),
             // 原版单词音频优先（material 里若带音频）
@@ -843,7 +861,7 @@ class _TypedContentViewState extends State<TypedContentView> {
                   return const SizedBox.shrink();
                 }
                 return IconButton(
-                  tooltip: '播放原版发音 ${c.audio}',
+                  tooltip: '播放原版发音',
                   onPressed: () => AudioPlayerService.I.open(native),
                   icon: const Icon(Icons.graphic_eq_rounded),
                 );
@@ -1029,10 +1047,14 @@ class _TypedContentViewState extends State<TypedContentView> {
           title: '故事内容',
           icon: Icons.auto_stories_rounded,
           children: [
-            EtsTextView(
-              c.text,
+            // 播放完整录音时跟读高亮（无时间轴，按时长比例分句）
+            KtvText(
+              text: c.text,
+              audioFile: c.audio.isEmpty ? '' : _materialPath(c.audio),
+              enabled: context.watch<SettingsService>().followHighlight,
+              menuBuilder: selMenuBuilder,
+              baseStyle: const TextStyle(height: 1.7),
               selectable: true,
-              style: const TextStyle(height: 1.7),
             ),
           ],
         ),
