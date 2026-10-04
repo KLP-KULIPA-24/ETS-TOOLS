@@ -878,17 +878,47 @@ class _AiChatPageState extends State<AiChatPage> {
     }
   }
 
-  /// 思考选择器：关 + 已启用档位（按配置顺序）+ 其余标准档位
-  /// （Agnes 默认只启用「开」，但其他档位也能在这里直接选，选完自动启用）
+  /// 思考选择器：只展示模型启用的档位（关 + 启用项）+「自定义…」手动输入任意深度
   Widget _thinkingSelector(SettingsService s, AiModel? model) {
     final cs = Theme.of(context).colorScheme;
     final cur = (model?.thinking ?? false) ? model!.thinkingLevel : 'off';
     final items = s.thinkingMenuLevels(model);
     return PopupMenuButton<String>(
       tooltip: '思考深度',
-      initialValue: cur,
-      onSelected: (v) {
+      initialValue: items.contains(cur) ? cur : null,
+      onSelected: (v) async {
         if (model == null) return;
+        if (v == '__custom__') {
+          final ctrl = TextEditingController(text: model.thinking ? model.thinkingLevel : '');
+          final value = await showDialog<String>(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('自定义思考深度'),
+              content: TextField(
+                controller: ctrl,
+                autofocus: true,
+                decoration: const InputDecoration(
+                  labelText: '深度值（注入 reasoning_effort）',
+                  hintText: '如 minimal / 2 / high',
+                ),
+                onSubmitted: (v) => Navigator.pop(context, v.trim()),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('取消'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.pop(context, ctrl.text.trim()),
+                  child: const Text('确定'),
+                ),
+              ],
+            ),
+          );
+          if (value == null || value.isEmpty) return;
+          s.setThinkingOption(model, value);
+          return;
+        }
         s.setThinkingOption(model, v);
       },
       itemBuilder: (_) => [
@@ -909,6 +939,18 @@ class _AiChatPageState extends State<AiChatPage> {
               ],
             ),
           ),
+        const PopupMenuDivider(),
+        const PopupMenuItem(
+          value: '__custom__',
+          child: Row(
+            children: [
+              SizedBox(width: 24),
+              Icon(Icons.edit_rounded, size: 16),
+              SizedBox(width: 8),
+              Text('自定义…'),
+            ],
+          ),
+        ),
       ],
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),

@@ -571,15 +571,11 @@ class SettingsService extends ChangeNotifier {
     _ensureDefaults();
   }
 
-  /// 思考档位菜单项：关 + 已启用档位（按配置顺序）+ 其余标准档位。
-  /// 后面那截保证任何档位都能直接选到，不因为没勾选就"调不了"。
+  /// 思考档位菜单项：关 + 已启用档位（按配置顺序）。
+  /// 只展示用户启用的档位（比如只显示 关/开，没有 低/中/高）；
+  /// 自定义深度走对话菜单的「自定义…」输入
   List<String> thinkingMenuLevels(AiModel? m) {
-    final enabled = m?.thinkingLevels ?? const <String>[];
-    return [
-      'off',
-      ...enabled,
-      ...kThinkingLevelOrder.where((lv) => !enabled.contains(lv)),
-    ];
+    return ['off', ...?m?.thinkingLevels];
   }
 
   /// 选档位：'off' = 关闭思考；其他档位若没在启用列表里就顺手加进去

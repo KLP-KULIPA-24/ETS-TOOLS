@@ -141,8 +141,10 @@ class LiquidGlass extends StatelessWidget {
               : Colors.black.withValues(alpha: 0.25))
         : (dark ? StyleTokens.glassTintDark : StyleTokens.glassTintLight);
     // 主题色微量透进玻璃：材质"有色"而不是死白（iOS 26 的材质反应感）
+    // tint 压到 0.06/0.08：此前 0.15/0.20 叠上背景色斑后，
+    // 控制层（尤其 AI 对话顶栏）读作一块实色紫带，很突兀
     final tint = Color.alphaBlend(
-      accent.withValues(alpha: dark ? 0.15 : 0.20),
+      accent.withValues(alpha: dark ? 0.08 : 0.06),
       base,
     );
     return ClipRRect(
