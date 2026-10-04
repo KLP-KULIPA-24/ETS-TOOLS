@@ -7,6 +7,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.provider.DocumentsContract
+import android.util.Log
 import com.topjohnwu.superuser.Shell
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -324,26 +325,40 @@ class MainActivity : FlutterActivity() {
             }
             var n = 0
             var used = rootDoc
+            val trace = StringBuilder() // 每个候选的结果轨迹，失败时带回给 UI/日志
             for (c in candidates) {
                 val uri = DocumentsContract.buildDocumentUriUsingTree(tree, c)
-                n = safCopyRec(resolver, tree, uri, out)
-                if (n > 0) {
+                val st = try {
+                    safCopyStats(resolver, tree, uri, out, 0)
+                } catch (e: Throwable) {
+                    Log.w("ETSSAF", "候选 $c 查询/拷贝异常", e)
+                    trace.append("[$c 异常: ${e.message}] ")
+                    null
+                }
+                Log.d("ETSSAF", "候选 $c → $st")
+                if (st != null && st.copied > 0) {
+                    n = st.copied
                     used = c
                     break
+                }
+                if (st != null) {
+                    trace.append("[$c 列出 ${st.listed} 拷贝 ${st.copied}${st.err?.let { " 首错: $it" } ?: ""}] ")
                 }
             }
             if (n == 0) {
                 // 兜底：系统选择器的授权层级五花八门（可能落在合成层级上，
                 // 固定候选全部落空）——在授权子树里向下搜 com.ets100.secondary
                 val found = findEtsDir(resolver, tree, rootDoc)
+                Log.d("ETSSAF", "BFS 找 com.ets100.secondary → $found")
+                trace.append("[BFS: ${found ?: "未找到"}] ")
                 if (found != null) {
                     used = found
-                    n = safCopyRec(
-                        resolver,
-                        tree,
-                        DocumentsContract.buildDocumentUriUsingTree(tree, found),
-                        out,
-                    )
+                    val st = safCopyStats(resolver, tree, DocumentsContract.buildDocumentUriUsingTree(tree, found), out, 0)
+                    n = st.copied
+                    Log.d("ETSSAF", "BFS 目录拷贝 → $st")
+                    if (n == 0) {
+                        trace.append("[BFS 目录列出 ${st.listed} 拷贝 0${st.err?.let { " 首错: $it" } ?: ""}] ")
+                    }
                 }
             }
             mapOf(
@@ -351,7 +366,7 @@ class MainActivity : FlutterActivity() {
                 "files" to n,
                 "msg" to
                     if (n > 0) "SAF 拷贝 $n 个文件（授权: $used）"
-                    else "SAF 没拷到文件（授权目录: $rootDoc）——请重新授权，选 E听说 的 Android/data 或它里面任意一层",
+                    else "SAF 没拷到文件（授权: $rootDoc）$trace——请点「重新授权」重选 E听说 的 Android/data",
             )
         } catch (e: Throwable) {
             mapOf("ok" to false, "files" to 0, "msg" to "SAF 拷贝失败：${e.message}")
@@ -411,52 +426,71 @@ class MainActivity : FlutterActivity() {
         return null
     }
 
-    /** 递归遍历 SAF document 拷贝到本地文件系统 */
-    private fun safCopyRec(
+    private data class SafStats(val listed: Int, val copied: Int, val err: String?)
+
+    /** 递归遍历 SAF document 拷贝到本地文件系统；全程计数+记首个错误（诊断用） */
+    private fun safCopyStats(
         resolver: ContentResolver,
         tree: Uri,
         dirUri: Uri,
         dst: File,
-    ): Int {
-        var n = 0
-        val children = try {
-            DocumentsContract.buildChildDocumentsUriUsingTree(
-                dirUri,
-                DocumentsContract.getDocumentId(dirUri),
-            )
-        } catch (_: Throwable) {
-            return 0
-        }
-        resolver.query(
-            children,
-            arrayOf(
-                DocumentsContract.Document.COLUMN_DOCUMENT_ID,
-                DocumentsContract.Document.COLUMN_DISPLAY_NAME,
-                DocumentsContract.Document.COLUMN_MIME_TYPE,
-            ),
-            null,
-            null,
-            null,
-        )?.use { c ->
-            while (c.moveToNext()) {
-                val id = c.getString(0)
-                val name = c.getString(1) ?: continue
-                val mime = c.getString(2)
-                val childUri = DocumentsContract.buildDocumentUriUsingTree(tree, id)
+        depth: Int,
+    ): SafStats {
+        if (depth > 15) return SafStats(0, 0, "目录过深")
+        var listed = 0
+        var copied = 0
+        var err: String? = null
+        val children =
+            try {
+                DocumentsContract.buildChildDocumentsUriUsingTree(
+                    dirUri,
+                    DocumentsContract.getDocumentId(dirUri),
+                )
+            } catch (e: Throwable) {
+                return SafStats(0, 0, "buildChildren: ${e.message}")
+            }
+        val c =
+            try {
+                resolver.query(
+                    children,
+                    arrayOf(
+                        DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+                        DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+                        DocumentsContract.Document.COLUMN_MIME_TYPE,
+                    ),
+                    null,
+                    null,
+                    null,
+                )
+            } catch (e: Throwable) {
+                return SafStats(0, 0, "query: ${e.message}")
+            } ?: return SafStats(0, 0, "query 返回 null")
+        c.use {
+            while (it.moveToNext()) {
+                listed++
+                val id = it.getString(0)
+                val name = it.getString(1) ?: continue
+                val mime = it.getString(2)
+                val childUri =
+                    DocumentsContract.buildDocumentUriUsingTree(tree, id)
                 if (mime == DocumentsContract.Document.MIME_TYPE_DIR) {
-                    n += safCopyRec(resolver, tree, childUri, File(dst, name))
+                    val r = safCopyStats(resolver, tree, childUri, File(dst, name), depth + 1)
+                    copied += r.copied
+                    if (err == null) err = r.err
                 } else {
                     try {
                         val target = File(dst, name)
                         resolver.openInputStream(childUri)?.use { i ->
                             FileOutputStream(target).use { o -> i.copyTo(o) }
                         }
-                        n++
-                    } catch (_: Throwable) {
+                        copied++
+                    } catch (e: Throwable) {
+                        Log.d("ETSSAF", "拷贝失败 $name: ${e.message}")
+                        if (err == null) err = "拷贝 $name: ${e.message}"
                     }
                 }
             }
         }
-        return n
+        return SafStats(listed, copied, err)
     }
 }
