@@ -588,9 +588,26 @@ class _TypedContentViewState extends State<TypedContentView> {
               tooltip: !available ? '当前系统无英语语音，可用原版录音' : (on ? '停止朗读' : tip),
               iconSize: 20,
               visualDensity: VisualDensity.compact,
-              onPressed: available ? () => TtsService.I.toggle(text) : null,
+              // 无语音包时按钮不再"点了没反应"：点一下说明原因 + 给出替代方案
+              onPressed: () {
+                if (!available) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        '这台设备没有可用的英语语音，无法生成朗读；'
+                        '带原版录音的句子/单词可以直接播放',
+                      ),
+                    ),
+                  );
+                  return;
+                }
+                TtsService.I.toggle(text);
+              },
               icon: Icon(
                 on ? Icons.stop_circle_rounded : Icons.record_voice_over_rounded,
+                color: available
+                    ? null
+                    : Theme.of(context).colorScheme.outline,
               ),
             );
           },

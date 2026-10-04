@@ -79,6 +79,27 @@ class _VideoCardState extends State<VideoCard> {
     await _player.playOrPause();
   }
 
+  /// 真全屏：同一个 player 另开一个 VideoController 推到全屏路由，控制条照旧（不再空按钮）
+  Future<void> _openFullscreen() async {
+    final fsController = VideoController(_player);
+    await Navigator.of(context).push(
+      PageRouteBuilder(
+        opaque: false,
+        barrierColor: Colors.black,
+        transitionDuration: const Duration(milliseconds: 220),
+        pageBuilder: (routeC, a, _) => _FullscreenVideo(
+          controller: fsController,
+          player: _player,
+          onClose: () => Navigator.of(routeC).pop(),
+          onToggle: _toggle,
+          onSpeed: _pickSpeed,
+        ),
+        transitionsBuilder: (_, anim, _, child) =>
+            FadeTransition(opacity: anim, child: child),
+      ),
+    );
+  }
+
   Future<void> _pickSpeed() async {
     final r = await showSpeedSheet(context, current: _player.state.rate);
     if (r != null) await _player.setRate(r);
@@ -182,6 +203,7 @@ class _VideoCardState extends State<VideoCard> {
                         },
                         onToggle: _toggle,
                         onSpeed: _pickSpeed,
+                        onFullscreen: _openFullscreen,
                         onDuration: (d) {
                           if (d > Duration.zero && d != _dur) {
                             setState(() => _dur = d);
@@ -210,6 +232,7 @@ class _VideoBar extends StatelessWidget {
   final void Function(double) onDragEnd;
   final VoidCallback onToggle;
   final VoidCallback onSpeed;
+  final VoidCallback onFullscreen;
   final void Function(Duration) onDuration;
 
   const _VideoBar({
@@ -222,6 +245,7 @@ class _VideoBar extends StatelessWidget {
     required this.onDragEnd,
     required this.onToggle,
     required this.onSpeed,
+    required this.onFullscreen,
     required this.onDuration,
   });
 
@@ -332,7 +356,7 @@ class _VideoBar extends StatelessWidget {
                         tooltip: '全屏',
                         visualDensity: VisualDensity.compact,
                         color: Colors.white,
-                        onPressed: () {},
+                        onPressed: onFullscreen,
                         icon: const Icon(Icons.fullscreen_rounded, size: 20),
                       ),
                     ],
@@ -343,6 +367,97 @@ class _VideoBar extends StatelessWidget {
           },
         );
       },
+    );
+  }
+}
+/// 全屏播放页：黑色背景 + 同一播放器的另一控制器 + 自绘控制条
+class _FullscreenVideo extends StatefulWidget {
+  final VideoController controller;
+  final Player player;
+  final VoidCallback onClose;
+  final VoidCallback onToggle;
+  final VoidCallback onSpeed;
+
+  const _FullscreenVideo({
+    required this.controller,
+    required this.player,
+    required this.onClose,
+    required this.onToggle,
+    required this.onSpeed,
+  });
+
+  @override
+  State<_FullscreenVideo> createState() => _FullscreenVideoState();
+}
+
+class _FullscreenVideoState extends State<_FullscreenVideo> {
+  double? _drag;
+  bool _bar = true;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () {
+              widget.onToggle();
+              setState(() => _bar = !_bar);
+            },
+          ),
+          Positioned.fill(
+            child: Video(
+              controller: widget.controller,
+              controls: NoVideoControls(),
+            ),
+          ),
+          // 顶部：返回 + 标题
+          Positioned(
+            left: 0,
+            right: 0,
+            top: 0,
+            child: SafeArea(
+              child: Row(
+                children: [
+                  IconButton(
+                    tooltip: '退出全屏',
+                    color: Colors.white,
+                    onPressed: widget.onClose,
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (_bar)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: _VideoBar(
+                player: widget.player,
+                loaded: true,
+                dur: Duration.zero,
+                dragPos: _drag,
+                onDragStart: (v) => setState(() => _drag = v),
+                onDragUpdate: (v) => setState(() => _drag = v),
+                onDragEnd: (v) {
+                  setState(() => _drag = null);
+                  widget.player.seek(
+                    Duration(milliseconds: (v * 1000).round()),
+                  );
+                },
+                onToggle: widget.onToggle,
+                onSpeed: widget.onSpeed,
+                onFullscreen: widget.onClose,
+                onDuration: (_) {},
+              ),
+            ),
+        ],
+      ),
     );
   }
 }
