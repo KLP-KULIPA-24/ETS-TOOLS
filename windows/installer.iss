@@ -3,7 +3,7 @@
 ; 前置：先执行 flutter build windows --release
 
 #define MyAppName "E听说助手"
-#define MyAppVersion "0.8.1"
+#define MyAppVersion "0.8.2"
 #define MyAppPublisher "苦力怕.KULIPA"
 #define MyAppURL "https://github.com/KLP-KULIPA-24"
 #define MyAppExeName "e_ets_helper.exe"
@@ -12,7 +12,7 @@
 AppId={{7E3B7C42-8D14-4F6A-9C21-5A8E1F0B3D99}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
-AppVerName={#MyAppName} V0.8.1
+AppVerName={#MyAppName} V0.8.2
 AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppURL}
 AppSupportURL={#MyAppURL}
@@ -22,7 +22,7 @@ UninstallDisplayName={#MyAppName}
 UninstallDisplayIcon={app}\{#MyAppExeName}
 ; 图标
 SetupIconFile=runner\resources\runner.exe.ico
-; 品牌横幅（左侧向导图：logo + 名称 + V0.8.1）
+; 品牌横幅（左侧向导图：logo + 名称 + V0.8.2）
 WizardImageFile=..\assets\branding\installer-banner.bmp
 WizardSmallImageFile=..\assets\branding\installer-banner.bmp
 ; 品牌配色（主色 #4F7CFF、浅底）

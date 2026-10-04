@@ -21,6 +21,10 @@ class TtsService {
   /// 正在朗读（UI 据此切换播放/停止图标）
   final ValueNotifier<bool> speaking = ValueNotifier(false);
 
+  /// 当前（或最近一次）朗读的文本：句卡/朗读按钮据此判断"是不是本条"，
+  /// 避免全局进度条让列表里每一行都跟着动
+  final ValueNotifier<String> currentText = ValueNotifier('');
+
   /// 朗读进度估算 0–1（TTS 无真实时间轴，按估算时长线性推进）
   final ValueNotifier<double> progress = ValueNotifier(0);
 
@@ -63,6 +67,7 @@ class TtsService {
       return false;
     }
     speaking.value = true;
+    currentText.value = text;
     // 平台完成回调在 Windows 不可用：按 2.5 词/秒估算时长自动复位
     final secs = (text.trim().split(RegExp(r'\s+')).length / 2.5 + 0.6).clamp(
       0.8,
@@ -106,11 +111,14 @@ class TtsService {
     if (speaking.value) speaking.value = false;
   }
 
-  /// 朗读或停止（按钮行为）
+  /// 朗读或停止（按钮行为）。正在读别的内容时直接切换到新文本，
+  /// 不用先点一次停止（旧行为：只会停掉当前朗读，得再点一次才开始读新的）
   Future<bool> toggle(String text) async {
     if (speaking.value) {
-      await stop();
-      return false;
+      if (currentText.value == text) {
+        await stop();
+        return false;
+      }
     }
     return speak(text);
   }

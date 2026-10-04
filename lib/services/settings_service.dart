@@ -47,9 +47,9 @@ const kAgnesPresetName = 'Agnes提供商';
 const kGithubRepoUrl = 'https://github.com/KLP-KULIPA-24/ETS-TOOLS';
 const kGithubRepoLabel = 'github.com/KLP-KULIPA-24/ETS-TOOLS';
 
-/// 对外版本号（当前 0.8.1）。
-/// 改这里时同步：pubspec.yaml / windows/installer.iss / 网页 V0.8.1 / docs/version.json
-const kAppVersion = '0.8.1';
+/// 对外版本号（当前 0.8.2）。
+/// 改这里时同步：pubspec.yaml / windows/installer.iss / 网页 V0.8.2 / docs/version.json
+const kAppVersion = '0.8.2';
 
 /// AI 服务提供商
 class AiProvider {

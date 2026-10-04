@@ -1,7 +1,7 @@
 name: e_ets_helper
 description: "E听说助手：作业答案查看、精听训练、AI 智能解析（Windows + Android）"
 publish_to: 'none'
-version: 0.8.1+10
+version: 0.8.2+11
 
 environment:
   sdk: ^3.13.4

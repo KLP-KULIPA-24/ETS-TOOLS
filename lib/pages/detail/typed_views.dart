@@ -568,28 +568,43 @@ class _TypedContentViewState extends State<TypedContentView> {
   }
 
   /// 播放/停止某一份范文：播放时展开进度条 + KTV 逐句高亮
-  /// TTS 朗读按钮：朗读中切换为停止图标；系统无英语语音时禁用并提示用原版录音
+  /// TTS 朗读按钮：只在"本条"朗读中切换为停止图标（列表里多个按钮互不串扰）；
+  /// 系统无英语语音时禁用并提示用原版录音
   Widget _ttsBtn(String text, {String tip = '朗读'}) {
     final available = TtsService.I.available;
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        ValueListenableBuilder<bool>(
-          valueListenable: TtsService.I.speaking,
-          builder: (context, on, _) => IconButton(
-            tooltip: !available ? '当前系统无英语语音，可用原版录音' : (on ? '停止朗读' : tip),
-            iconSize: 20,
-            visualDensity: VisualDensity.compact,
-            onPressed: available ? () => TtsService.I.toggle(text) : null,
-            icon: Icon(
-              on ? Icons.stop_circle_rounded : Icons.record_voice_over_rounded,
-            ),
-          ),
+        AnimatedBuilder(
+          animation: Listenable.merge([
+            TtsService.I.speaking,
+            TtsService.I.currentText,
+          ]),
+          builder: (context, _) {
+            final on =
+                TtsService.I.speaking.value &&
+                TtsService.I.currentText.value == text;
+            return IconButton(
+              tooltip: !available ? '当前系统无英语语音，可用原版录音' : (on ? '停止朗读' : tip),
+              iconSize: 20,
+              visualDensity: VisualDensity.compact,
+              onPressed: available ? () => TtsService.I.toggle(text) : null,
+              icon: Icon(
+                on ? Icons.stop_circle_rounded : Icons.record_voice_over_rounded,
+              ),
+            );
+          },
         ),
-        // 朗读中：进度条（估算）+ 倍速（点按循环）
-        ValueListenableBuilder<bool>(
-          valueListenable: TtsService.I.speaking,
-          builder: (context, on, _) {
+        // 朗读中：进度条（估算）+ 倍速（点按循环）——同样只在"本条"显示
+        AnimatedBuilder(
+          animation: Listenable.merge([
+            TtsService.I.speaking,
+            TtsService.I.currentText,
+          ]),
+          builder: (context, _) {
+            final on =
+                TtsService.I.speaking.value &&
+                TtsService.I.currentText.value == text;
             if (!on) return const SizedBox.shrink();
             final cs = Theme.of(context).colorScheme;
             return Padding(
@@ -1705,19 +1720,27 @@ class _SentenceListViewState extends State<SentenceListView> {
                               ),
                             ),
                           // 朗读进度条（常驻）：TTS 无法 seek，进度为估算；
-                          // 右侧「朗读 / 暂停」切换
+                          // 只在"本句"上显示——正在读本句走进度，刚读完保持满格，其他句子空条
                           const SizedBox(height: 6),
-                          ValueListenableBuilder<bool>(
-                            valueListenable: TtsService.I.speaking,
-                            builder: (context, sp, _) => Row(
-                              children: [
-                                Expanded(
-                                  child: ValueListenableBuilder<double>(
-                                    valueListenable: TtsService.I.progress,
-                                    builder: (context, pr, _) => ClipRRect(
+                          AnimatedBuilder(
+                            animation: Listenable.merge([
+                              TtsService.I.speaking,
+                              TtsService.I.progress,
+                              TtsService.I.currentText,
+                            ]),
+                            builder: (context, _) {
+                              final sp = TtsService.I.speaking.value;
+                              final pr = TtsService.I.progress.value;
+                              final mine = TtsService.I.currentText.value == s.text;
+                              final active = sp && mine; // 正在读本句
+                              final done = !sp && mine && pr >= 1; // 刚读完本句
+                              return Row(
+                                children: [
+                                  Expanded(
+                                    child: ClipRRect(
                                       borderRadius: BorderRadius.circular(999),
                                       child: LinearProgressIndicator(
-                                        value: sp ? pr : (pr >= 1 ? 1 : 0),
+                                        value: active ? pr : (done ? 1 : 0),
                                         minHeight: 3,
                                         backgroundColor: cs.primary.withValues(
                                           alpha: 0.12,
@@ -1726,46 +1749,54 @@ class _SentenceListViewState extends State<SentenceListView> {
                                       ),
                                     ),
                                   ),
-                                ),
-                                const SizedBox(width: 8),
-                                InkWell(
-                                  borderRadius: BorderRadius.circular(6),
-                                  onTap: () => TtsService.I.toggle(s.text),
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 6,
-                                      vertical: 2,
-                                    ),
-                                    child: Text(
-                                      sp ? '暂停' : '朗读',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        color: cs.primary,
+                                  const SizedBox(width: 8),
+                                  InkWell(
+                                    borderRadius: BorderRadius.circular(6),
+                                    onTap: () => TtsService.I.toggle(s.text),
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 6,
+                                        vertical: 2,
+                                      ),
+                                      child: Text(
+                                        active ? '暂停' : '朗读',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: cs.primary,
+                                        ),
                                       ),
                                     ),
                                   ),
-                                ),
-                              ],
-                            ),
+                                ],
+                              );
+                            },
                           ),
                         ],
                       ),
                     ),
                     // 本地朗读本句（原版录音区间播放已移除：无法精准识别句子位置）
-                    IconButton(
-                      tooltip: TtsService.I.speaking.value ? '暂停朗读' : '朗读本句',
-                      visualDensity: VisualDensity.compact,
-                      iconSize: 20,
-                      onPressed: () => TtsService.I.toggle(s.text),
-                      icon: ValueListenableBuilder<bool>(
-                        valueListenable: TtsService.I.speaking,
-                        builder: (context, sp, _) => Icon(
-                          sp
-                              ? Icons.pause_circle_rounded
-                              : Icons.record_voice_over_rounded,
-                          color: sp ? cs.primary : cs.outline,
-                        ),
-                      ),
+                    AnimatedBuilder(
+                      animation: Listenable.merge([
+                        TtsService.I.speaking,
+                        TtsService.I.currentText,
+                      ]),
+                      builder: (context, _) {
+                        final active =
+                            TtsService.I.speaking.value &&
+                            TtsService.I.currentText.value == s.text;
+                        return IconButton(
+                          tooltip: active ? '暂停朗读' : '朗读本句',
+                          visualDensity: VisualDensity.compact,
+                          iconSize: 20,
+                          onPressed: () => TtsService.I.toggle(s.text),
+                          icon: Icon(
+                            active
+                                ? Icons.pause_circle_rounded
+                                : Icons.record_voice_over_rounded,
+                            color: active ? cs.primary : cs.outline,
+                          ),
+                        );
+                      },
                     ),
                   ],
                 ),
