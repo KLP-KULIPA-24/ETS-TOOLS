@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import '../services/audio_player_service.dart';
 import '../services/media_share.dart';
+import 'speed_sheet.dart';
 
 /// 音频播放条：播放/暂停、进度、倍速、AB 循环
 class AudioBar extends StatefulWidget {
@@ -38,7 +39,6 @@ class _AudioBarState extends State<AudioBar> {
   double _pos = 0;
   double _dur = 0;
 
-  static const _speeds = [0.6, 0.8, 1.0, 1.25, 1.5, 2.0];
 
   @override
   void initState() {
@@ -155,9 +155,9 @@ class _AudioBarState extends State<AudioBar> {
               Row(
                 children: [
                   const Spacer(),
-                  // 倍速：点击即切换下一档（循环 0.6→2.0），不依赖下拉菜单
+                  // 倍速：点开面板（预设档 + 滑杆拖动 + 手动输入任意值）
                   Tooltip(
-                    message: '点击切换倍速（0.6x–2.0x）',
+                    message: '播放倍速',
                     child: ActionChip(
                       avatar: Icon(
                         Icons.speed_rounded,
@@ -169,12 +169,15 @@ class _AudioBarState extends State<AudioBar> {
                         style: Theme.of(context).textTheme.labelSmall,
                       ),
                       visualDensity: VisualDensity.compact,
-                      onPressed: () {
-                        final i = _speeds.indexOf(speed);
-                        final next =
-                            _speeds[(i < 0 ? 0 : i + 1) % _speeds.length];
-                        ps.setSpeed(next);
-                        if (mounted) setState(() {});
+                      onPressed: () async {
+                        final r = await showSpeedSheet(
+                          context,
+                          current: ps.speed,
+                        );
+                        if (r != null) {
+                          ps.setSpeed(r);
+                          if (mounted) setState(() {});
+                        }
                       },
                     ),
                   ),

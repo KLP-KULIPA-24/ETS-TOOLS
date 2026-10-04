@@ -246,14 +246,21 @@ class _HomeworkPageState extends State<HomeworkPage> {
               key: _kFab,
               heroTag: 'rescan',
               onPressed: (_refreshing || ds.scanning) ? null : _refresh,
+              // 轻透玻璃小胶囊，别做成一大块实色
+              elevation: 0,
+              highlightElevation: 0,
+              backgroundColor: cs.primary.withValues(alpha: 0.14),
+              foregroundColor: cs.primary,
+              shape: const StadiumBorder(),
+              extendedPadding: const EdgeInsets.symmetric(horizontal: 14),
               icon: (_refreshing || ds.scanning)
                   ? const SizedBox(
-                      width: 18,
-                      height: 18,
+                      width: 15,
+                      height: 15,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : const Icon(Icons.refresh_rounded),
-              label: const Text('刷新'),
+                  : const Icon(Icons.refresh_rounded, size: 18),
+              label: const Text('刷新', style: TextStyle(fontSize: 13)),
             ),
           ],
         ),
@@ -283,6 +290,8 @@ class _HomeworkPageState extends State<HomeworkPage> {
                         height: 44,
                         child: ListView(
                           scrollDirection: Axis.horizontal,
+                          // 右侧留白：最后一个筛选胶囊不贴边（也是"还能往右滑"的提示）
+                          padding: const EdgeInsets.only(right: 16),
                           children: [
                             _filterChip(
                               null,
@@ -336,24 +345,37 @@ class _HomeworkPageState extends State<HomeworkPage> {
                         ),
                       ),
                       const SizedBox(height: 6),
-                      Row(
-                        key: _kSearch,
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              controller: _search,
-                              decoration: InputDecoration(
-                                isDense: true,
-                                hintText: '搜索标题 / 题号…',
-                                prefixIcon: const Icon(Icons.search, size: 20),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
+                      // 窄屏换行：搜索框独占一行，排序/视图/管理退到第二行
+                      LayoutBuilder(
+                        builder: (context, box) {
+                          final narrow = box.maxWidth < 560;
+                          return Wrap(
+                            key: _kSearch,
+                            spacing: 6,
+                            runSpacing: 6,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              SizedBox(
+                                width: (narrow
+                                        ? box.maxWidth
+                                        : box.maxWidth - 236)
+                                    .clamp(180.0, box.maxWidth),
+                                child: TextField(
+                                  controller: _search,
+                                  decoration: InputDecoration(
+                                    isDense: true,
+                                    hintText: '搜索标题 / 题号…',
+                                    prefixIcon: const Icon(
+                                      Icons.search,
+                                      size: 20,
+                                    ),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(14),
+                                    ),
+                                  ),
                                 ),
                               ),
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          PopupMenuButton<_SortMode>(
+                              PopupMenuButton<_SortMode>(
                             tooltip: '排序方式',
                             onSelected: (v) => setState(() => _sort = v),
                             itemBuilder: (_) => const [
@@ -389,7 +411,7 @@ class _HomeworkPageState extends State<HomeworkPage> {
                               visualDensity: VisualDensity.compact,
                             ),
                           ),
-                          PopupMenuButton<int>(
+                              PopupMenuButton<int>(
                             tooltip: '展示方式',
                             onSelected: (v) => setState(() {
                               if (v == -1) {
@@ -443,15 +465,20 @@ class _HomeworkPageState extends State<HomeworkPage> {
                               visualDensity: VisualDensity.compact,
                             ),
                           ),
-                          IconButton(
-                            tooltip: '管理作业',
-                            icon: const Icon(Icons.checklist_rounded, size: 20),
-                            onPressed: () => setState(() {
-                              _selectMode = true;
-                              _selectedKeys.clear();
-                            }),
-                          ),
-                        ],
+                              IconButton(
+                                tooltip: '管理作业',
+                                icon: const Icon(
+                                  Icons.checklist_rounded,
+                                  size: 20,
+                                ),
+                                onPressed: () => setState(() {
+                                  _selectMode = true;
+                                  _selectedKeys.clear();
+                                }),
+                              ),
+                            ],
+                          );
+                        },
                       ),
                       if (deleted.isNotEmpty)
                         Align(

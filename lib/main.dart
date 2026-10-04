@@ -674,10 +674,25 @@ class EtsHelperApp extends StatelessWidget {
         space: 1,
       ),
       chipTheme: ChipThemeData(
-        backgroundColor: Colors.transparent,
-        side: BorderSide(color: borderColor),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        labelStyle: TextStyle(fontSize: 12, color: StyleTokens.textOf(b)),
+        // iOS 26 质感：胶囊、无硬边、底色轻透（选中=主题色微染）
+        backgroundColor: StyleTokens.textOf(b).withValues(alpha: 0.05),
+        selectedColor: themed.primary.withValues(alpha: 0.14),
+        checkmarkColor: themed.primary,
+        side: BorderSide.none,
+        shape: const StadiumBorder(),
+        labelStyle: TextStyle(fontSize: 13, color: StyleTokens.textOf(b)),
+        secondaryLabelStyle: TextStyle(
+          fontSize: 13,
+          color: StyleTokens.textOf(b),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          shape: const StadiumBorder(),
+          foregroundColor: themed.primary,
+          textStyle: const TextStyle(fontSize: 13),
+        ),
       ),
       listTileTheme: ListTileThemeData(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -705,12 +720,22 @@ class EtsHelperApp extends StatelessWidget {
           borderSide: BorderSide(color: scheme.primary),
         ),
       ),
-      // 控件胶囊形（style-pack: control = capsule）
+      // 控件胶囊形（style-pack: control = capsule）+ 轻透底，替掉默认 Material 硬边按钮
       filledButtonTheme: FilledButtonThemeData(
-        style: FilledButton.styleFrom(shape: const StadiumBorder()),
+        style: FilledButton.styleFrom(
+          shape: const StadiumBorder(),
+          elevation: 0,
+          textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+        ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
-        style: OutlinedButton.styleFrom(shape: const StadiumBorder()),
+        style: OutlinedButton.styleFrom(
+          shape: const StadiumBorder(),
+          side: BorderSide(color: themed.primary.withValues(alpha: 0.28)),
+          backgroundColor: themed.primary.withValues(alpha: 0.06),
+          foregroundColor: StyleTokens.textOf(b),
+          textStyle: const TextStyle(fontSize: 13),
+        ),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(shape: const StadiumBorder()),
@@ -720,13 +745,19 @@ class EtsHelperApp extends StatelessWidget {
       ),
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
-        backgroundColor: StyleTokens.textOf(b).withValues(alpha: 0.92),
+        // 轻透玻璃底，不再是实心黑块
+        backgroundColor: StyleTokens.textOf(b).withValues(alpha: 0.74),
+        elevation: 0,
         contentTextStyle: TextStyle(
           fontSize: 13,
           color: b == Brightness.dark ? const Color(0xFF0F1115) : Colors.white,
         ),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        insetPadding: const EdgeInsets.all(16),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+          side: BorderSide(color: Colors.white.withValues(alpha: 0.18)),
+        ),
+        // 底部抬到导航胶囊之上，不再压住下方菜单栏
+        insetPadding: const EdgeInsets.fromLTRB(16, 16, 16, 104),
       ),
     );
   }
