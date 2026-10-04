@@ -99,7 +99,10 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
           ),
           Expanded(
-            child: ListView(
+            // 一次性全量构建（不用懒加载的 ListView）：分区导航的锚点 key
+            // 必须"已挂载"才能取到 context，懒加载时未滚到的卡片 key 为 null，
+            // 点导航 chip（尤其最底下的「关于」）会没有任何反应
+            child: SingleChildScrollView(
               controller: _scroll,
               // 底部留出系统导航栏安全区，滚到最后一项不被盖住
               padding: EdgeInsets.fromLTRB(
@@ -108,7 +111,9 @@ class _SettingsPageState extends State<SettingsPage> {
                 16,
                 16 + MediaQuery.viewPaddingOf(context).bottom,
               ),
-              children: [
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
                 // ---- 使用帮助（置顶，避免新手找不到） ----
                 AppCard(
                   radius: 18,
@@ -701,7 +706,8 @@ class _SettingsPageState extends State<SettingsPage> {
                   ),
                 ),
                 const SizedBox(height: 110),
-              ],
+                ],
+              ),
             ),
           ),
         ],

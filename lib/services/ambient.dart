@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'achievements.dart';
 
@@ -145,7 +146,15 @@ class Ambient {
   }
 
   static Future<bool> _regGet(String name) async {
-    if (!Platform.isWindows) return _mem[name] ?? false;
+    if (!Platform.isWindows) {
+      // 非 Windows：状态落到 SharedPreferences（重启不丢；卸载重装仍会清空）
+      try {
+        final p = await SharedPreferences.getInstance();
+        return p.getBool('uicache_$name') ?? _mem[name] ?? false;
+      } catch (_) {
+        return _mem[name] ?? false;
+      }
+    }
     try {
       final r = await Process.run('reg', ['query', _regKey, '/v', name]);
       if (r.exitCode != 0) return _mem[name] ?? false;
@@ -157,7 +166,13 @@ class Ambient {
 
   static Future<void> _regSet(String name, bool v) async {
     _mem[name] = v;
-    if (!Platform.isWindows) return;
+    if (!Platform.isWindows) {
+      try {
+        final p = await SharedPreferences.getInstance();
+        await p.setBool('uicache_$name', v);
+      } catch (_) {}
+      return;
+    }
     try {
       await Process.run('reg', [
         'add',

@@ -155,9 +155,19 @@ class _HomeworkPageState extends State<HomeworkPage> {
     final wide = MediaQuery.of(context).size.width >= 700;
     // Windows 恒提供"去设置目录"；Android 仅在数据目录真实存在时提示权限
     // （目录都不存在 = 用户还没下载作业，不是权限问题，别误导）
+    // 注意：没有"所有文件访问"权限时，existsSync() 对其他应用的 Android/data
+    // 目录不是返回 false 而是直接抛 Permission denied——在 build 里抛 = 整页灰屏
+    bool rootReachable(String r) {
+      try {
+        return Directory(r).existsSync();
+      } catch (_) {
+        return false;
+      }
+    }
+
     final showRootAction =
         Platform.isWindows ||
-        SettingsService.I.activeRoots.any((r) => Directory(r).existsSync());
+        SettingsService.I.activeRoots.any(rootReachable);
 
     final completed = settings.completedDirs;
     final deleted = settings.deletedDirs;

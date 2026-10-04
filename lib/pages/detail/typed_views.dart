@@ -683,7 +683,9 @@ class _TypedContentViewState extends State<TypedContentView> {
     showDialog(
       context: context,
       barrierColor: Colors.black87,
+      // 黑底：底部操作行是白色胶囊（分享/保存/复制），白底下会隐形
       builder: (_) => Dialog.fullscreen(
+        backgroundColor: Colors.black,
         child: Stack(
           children: [
             Center(
