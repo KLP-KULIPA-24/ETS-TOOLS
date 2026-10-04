@@ -101,6 +101,21 @@ New-Item -ItemType Directory -Force -Path $APK_DIR | Out-Null
 Copy-Item $apkSrc (Join-Path $APK_DIR "ETS-TOOLS-Android-$ver.apk") -Force
 Write-Host '      APK 已生成（装手机）' -ForegroundColor DarkGray
 
+# 清理旧版本产物：只保留当前 $ver 的文件 / 开发者版目录（每次出包自动执行）
+Write-Host '      清理旧版本产物...' -ForegroundColor DarkGray
+foreach ($dir in @($SETUP_DIR, $PORTABLE_DIR, $APK_DIR)) {
+  if (Test-Path $dir) {
+    Get-ChildItem $dir -File |
+      Where-Object { $_.Name -notmatch [regex]::Escape($ver) } |
+      Remove-Item -Force -ErrorAction SilentlyContinue
+  }
+}
+if (Test-Path $DEV_DIR) {
+  Get-ChildItem $DEV_DIR -Directory |
+    Where-Object { $_.Name -notmatch [regex]::Escape($ver) } |
+    Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+}
+
 Write-Host ''
 Write-Host '==============================================' -ForegroundColor Green
 Write-Host "  出包完成 v$ver  ($today)" -ForegroundColor Green
