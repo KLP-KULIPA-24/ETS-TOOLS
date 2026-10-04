@@ -480,6 +480,9 @@ class MainActivity : FlutterActivity() {
                 } else {
                     try {
                         val target = File(dst, name)
+                        // FileOutputStream 不会创建中间父目录：
+                        // 不补 mkdirs 的话，除根层外的所有文件都会 ENOENT 失败
+                        target.parentFile?.mkdirs()
                         resolver.openInputStream(childUri)?.use { i ->
                             FileOutputStream(target).use { o -> i.copyTo(o) }
                         }
