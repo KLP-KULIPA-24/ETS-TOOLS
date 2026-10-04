@@ -310,26 +310,28 @@ class _FloatingNavBar extends StatelessWidget {
     ];
 
     Widget content = Container(
-      height: 60,
+      height: 62,
       decoration: BoxDecoration(
+        // iOS 26 悬浮导航：半透玻璃 + 发丝边 + 轻浮起；不再是一块死白
         color: glass
             ? (dark
-                  ? const Color(0xFF141A26).withValues(alpha: 0.92)
-                  : Colors.white.withValues(alpha: 0.9))
+                  ? const Color(0xFF141A26).withValues(alpha: 0.72)
+                  : Colors.white.withValues(alpha: 0.72))
             : cs.surfaceContainerHigh,
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(28),
         border: glass
             ? Border.all(
                 color: dark
                     ? Colors.white.withValues(alpha: 0.14)
-                    : Colors.white.withValues(alpha: 0.7),
+                    : Colors.white.withValues(alpha: 0.9),
               )
             : Border.all(color: cs.outlineVariant.withValues(alpha: 0.4)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: dark ? 0.4 : 0.14),
-            blurRadius: 16,
-            offset: const Offset(0, 4),
+            color: Colors.black.withValues(alpha: dark ? 0.42 : 0.10),
+            blurRadius: 24,
+            offset: const Offset(0, 8),
+            spreadRadius: -6,
           ),
         ],
       ),
@@ -343,8 +345,15 @@ class _FloatingNavBar extends StatelessWidget {
                 onTap: () => onTap(i),
                 splashColor: cs.primary.withValues(alpha: 0.16),
                 highlightColor: Colors.transparent,
-                child: SizedBox(
-                  height: 60,
+                child: Container(
+                  height: 62,
+                  margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 7),
+                  decoration: index == i
+                      ? BoxDecoration(
+                          color: cs.primary.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(999),
+                        )
+                      : null,
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [

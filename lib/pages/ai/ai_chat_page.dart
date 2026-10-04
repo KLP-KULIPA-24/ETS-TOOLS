@@ -1836,8 +1836,21 @@ class GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    return LiquidGlass(
-      radius: BorderRadius.zero,
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      // 顶栏玻璃：浅色 0.66 磨砂 + 底缘发丝线（纯透明等于没有玻璃）
+      decoration: BoxDecoration(
+        color: dark
+            ? const Color(0xFF141A26).withValues(alpha: 0.62)
+            : Colors.white.withValues(alpha: 0.66),
+        border: Border(
+          bottom: BorderSide(
+            color: dark
+                ? Colors.white.withValues(alpha: 0.10)
+                : Colors.white.withValues(alpha: 0.9),
+          ),
+        ),
+      ),
       child: AppBar(
         backgroundColor: Colors.transparent,
         leading: leading,
@@ -1862,7 +1875,7 @@ class GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
         ),
         actions: actions,
         titleSpacing: 8,
-      ),
+        ),
     );
   }
 }

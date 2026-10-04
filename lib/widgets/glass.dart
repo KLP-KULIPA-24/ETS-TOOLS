@@ -217,14 +217,14 @@ class GlassWall extends StatelessWidget {
         Positioned(
           top: -90,
           right: -70,
-          child: _blob(280, accent.withValues(alpha: dark ? 0.24 : 0.30)),
+          child: _blob(280, accent.withValues(alpha: dark ? 0.10 : 0.09)),
         ),
         Positioned(
           bottom: -90,
           left: -60,
           child: _blob(
             300,
-            const Color(0xFF22D3EE).withValues(alpha: dark ? 0.22 : 0.36),
+            const Color(0xFF22D3EE).withValues(alpha: dark ? 0.09 : 0.10),
           ),
         ),
         Positioned(
@@ -232,7 +232,7 @@ class GlassWall extends StatelessWidget {
           left: -110,
           child: _blob(
             280,
-            const Color(0xFFE91E8C).withValues(alpha: dark ? 0.14 : 0.22),
+            const Color(0xFFE91E8C).withValues(alpha: dark ? 0.05 : 0.06),
           ),
         ),
         Positioned(
@@ -240,7 +240,7 @@ class GlassWall extends StatelessWidget {
           right: -120,
           child: _blob(
             320,
-            const Color(0xFF8B5CF6).withValues(alpha: dark ? 0.16 : 0.26),
+            const Color(0xFF8B5CF6).withValues(alpha: dark ? 0.06 : 0.07),
           ),
         ),
         const Positioned.fill(child: _AmbientTintBackdrop()),

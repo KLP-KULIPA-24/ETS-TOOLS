@@ -614,7 +614,6 @@ class EtsHelperApp extends StatelessWidget {
           ? const Color(0xFF9AA1AC)
           : const Color(0xFF525A68),
     );
-    const radius12 = BorderRadius.all(Radius.circular(12));
     return ThemeData(
       useMaterial3: true,
       colorScheme: themed,
@@ -704,20 +703,22 @@ class EtsHelperApp extends StatelessWidget {
           StyleTokens.textOf(b).withValues(alpha: 0.22),
         ),
       ),
+      // 输入框：iOS 胶囊——浅灰填充、无硬边、圆角 999
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: surface,
+        fillColor: StyleTokens.textOf(b).withValues(alpha: 0.05),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         border: OutlineInputBorder(
-          borderRadius: radius12,
-          borderSide: BorderSide(color: borderColor),
+          borderRadius: BorderRadius.circular(999),
+          borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: radius12,
-          borderSide: BorderSide(color: borderColor),
+          borderRadius: BorderRadius.circular(999),
+          borderSide: BorderSide.none,
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: radius12,
-          borderSide: BorderSide(color: scheme.primary),
+          borderRadius: BorderRadius.circular(999),
+          borderSide: BorderSide(color: themed.primary.withValues(alpha: 0.5)),
         ),
       ),
       // 控件胶囊形（style-pack: control = capsule）+ 轻透底，替掉默认 Material 硬边按钮

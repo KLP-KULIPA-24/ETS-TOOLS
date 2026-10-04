@@ -67,30 +67,31 @@ class AppCard extends StatelessWidget {
       margin: margin,
       padding: padding,
       decoration: BoxDecoration(
-        // 内容层也走玻璃：半透（背景可透），靠描边+阴影立层次
+        // 内容层**不做玻璃**（style-pack：玻璃只给导航/控制层）：
+        // 干净的近实体卡片 + 细边 + 柔影，玻璃只留给顶栏/导航胶囊/悬浮控件
         color:
             color ??
             (dark
-                ? StyleTokens.surfaceOf(b).withValues(alpha: 0.42)
-                : Colors.white.withValues(alpha: 0.55)),
+                ? StyleTokens.surfaceOf(b).withValues(alpha: 0.92)
+                : Colors.white.withValues(alpha: 0.93)),
         borderRadius: radiusR,
         border: Border.all(
           color:
               border?.top.color ??
               (dark
-                  ? StyleTokens.borderOf(b).withValues(alpha: 0.85)
-                  : const Color(0x14111628)),
+                  ? StyleTokens.borderOf(b).withValues(alpha: 0.9)
+                  : const Color(0x1F111628)),
         ), // 浅色：灰蓝细边（白边在白底上等于没有）
         boxShadow: [
-          // 柔和纵深：贴近网页卡片的 shadow.sm→md 之间的观感
+          // 柔和纵深：iOS 卡片那种"轻轻浮起来"的影子
           BoxShadow(
             color: Color.alphaBlend(
-              Colors.black.withValues(alpha: dark ? 0.34 : 0.07),
+              Colors.black.withValues(alpha: dark ? 0.38 : 0.08),
               Colors.transparent,
             ),
-            blurRadius: dark ? 14 : 18,
-            offset: Offset(0, dark ? 5 : 6),
-            spreadRadius: -4,
+            blurRadius: dark ? 16 : 24,
+            offset: Offset(0, dark ? 5 : 8),
+            spreadRadius: -6,
           ),
         ],
       ),

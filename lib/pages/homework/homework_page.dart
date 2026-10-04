@@ -315,7 +315,7 @@ class _HomeworkPageState extends State<HomeworkPage> {
                               selected: _showDone,
                               label: const Text('已完成区'),
                               avatar: const Icon(
-                                Icons.check_circle_rounded,
+                                Icons.check_rounded,
                                 size: 15,
                               ),
                               onSelected: (v) => setState(() {
@@ -904,7 +904,7 @@ class _GroupCard extends StatelessWidget {
                           Padding(
                             padding: const EdgeInsets.only(left: 4),
                             child: Icon(
-                              Icons.check_circle_rounded,
+                              Icons.check_rounded,
                               size: 15,
                               color: Colors.green.shade600,
                             ),
@@ -1027,7 +1027,7 @@ class _GroupTile extends StatelessWidget {
                         if (done) ...[
                           const SizedBox(width: 4),
                           Icon(
-                            Icons.check_circle_rounded,
+                            Icons.check_rounded,
                             size: 12,
                             color: Colors.green.shade600,
                           ),
@@ -1101,13 +1101,27 @@ class _EmptyState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.folder_open_rounded, size: 64, color: cs.outline),
-            const SizedBox(height: 16),
+            // 图标：玻璃圆底 + 主色，缩到 44（原 64 灰图标在手机上过于抢眼）
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: cs.primary.withValues(alpha: 0.10),
+                border: Border.all(color: cs.primary.withValues(alpha: 0.22)),
+              ),
+              child: Icon(
+                Icons.folder_open_rounded,
+                size: 28,
+                color: cs.primary,
+              ),
+            ),
+            const SizedBox(height: 14),
             Text(
               '未找到 E听说 作业数据',
-              style: Theme.of(context).textTheme.titleMedium,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
             Text(
               Platform.isWindows
                   ? '默认目录：${SettingsService.platformDefaultRoot}\n'
@@ -1120,7 +1134,7 @@ class _EmptyState extends StatelessWidget {
                   ?.copyWith(color: cs.outline),
             ),
             if (onPickRoot != null) ...[
-              const SizedBox(height: 16),
+              const SizedBox(height: 14),
               FilledButton.tonalIcon(
                 onPressed: onPickRoot,
                 icon: const Icon(Icons.folder_open_rounded),
