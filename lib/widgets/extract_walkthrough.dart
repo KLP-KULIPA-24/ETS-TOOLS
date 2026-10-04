@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../services/extract_service.dart';
+import '../services/settings_service.dart';
 
 /// 选择工作授权模式：四通道（SHIZUKU / ROOT / DIRECT_READ / SAF）
 /// 参照 ETSToolbox 的模式选择形态：单选卡 + 徽章 + 说明 + 实时状态 + 操作
@@ -52,13 +53,18 @@ class _ExtractWalkthroughState extends State<ExtractWalkthrough> {
     setState(() {
       _ready = ready;
       _stateText = stateText;
-      // 默认选中第一个就绪的通道（按推荐顺序）
+      // 默认选中上一次用户指定的通道（作业页「刷新」会优先用它），
+      // 没选过或该通道当前未就绪时，退回第一个就绪的通道（按推荐顺序）
       if (_selected == null) {
+        final pref = SettingsService.I.extractModePref;
+        final saved = ExtractMode.values
+            .where((m) => m.name == pref && ready[m] == true)
+            .firstOrNull;
         final hits = ready.entries
             .where((e) => e.value)
             .map((e) => e.key)
             .toList();
-        _selected = hits.isEmpty ? null : hits.first;
+        _selected = saved ?? (hits.isEmpty ? null : hits.first);
       }
     });
   }
@@ -89,6 +95,8 @@ class _ExtractWalkthroughState extends State<ExtractWalkthrough> {
   Future<void> _extract() async {
     final mode = _selected;
     if (mode == null || _busy) return;
+    // 记住用户指定的通道：作业页「刷新」会优先用它，不再按固定顺序切回 Root
+    SettingsService.I.setExtractModePref(mode.name);
     setState(() {
       _busy = true;
       _status = '正在用 ${mode.label} 提取…';

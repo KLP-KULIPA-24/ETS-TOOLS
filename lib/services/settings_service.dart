@@ -224,6 +224,9 @@ class SettingsService extends ChangeNotifier {
   /// 启动时自动检测更新（查官网版本号，可关）
   bool autoCheckUpdate = true;
 
+  /// 用户指定的提取通道（'' = 未指定，自动按可用顺序；作业页刷新优先用它）
+  String extractModePref = '';
+
   void setChannel({bool? root, bool? shizuku}) {
     if (root != null) {
       useRoot = root;
@@ -312,6 +315,7 @@ class SettingsService extends ChangeNotifier {
     useRoot = _sp.getBool('useRoot') ?? true;
     useShizuku = _sp.getBool('useShizuku') ?? true;
     autoCheckUpdate = _sp.getBool('autoCheckUpdate') ?? true;
+    extractModePref = _sp.getString('extractModePref') ?? '';
     aiRetryCount = _sp.getInt('aiRetryCount') ?? 3;
     aiRatePerMin = _sp.getInt('aiRatePerMin') ?? 0;
 
@@ -509,6 +513,11 @@ class SettingsService extends ChangeNotifier {
     autoCheckUpdate = v;
     _sp.setBool('autoCheckUpdate', v);
     notifyListeners();
+  }
+
+  void setExtractModePref(String name) {
+    extractModePref = name;
+    _sp.setString('extractModePref', name);
   }
 
   void setStyleMode(AppStyle s) {

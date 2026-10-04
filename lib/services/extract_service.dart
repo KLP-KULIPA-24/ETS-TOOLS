@@ -168,18 +168,27 @@ class ExtractService {
     }
   }
 
-  /// 刷新（作业页 FAB）：自动按可用通道提取，全部不可用则直接扫描现有目录
+  /// 刷新（作业页 FAB）：优先用用户指定的通道（SAF 卡上点过「开始提取」的那个），
+  /// 失败再按可用顺序降级；全部不可用则直接扫描现有目录
   static Future<(bool, String)> refresh() async {
     if (!Platform.isAndroid) {
       await EtsDataService.I.rescan();
       return (true, '已刷新，共 ${EtsDataService.I.entries.length} 项作业');
     }
     final pr = await probeAll();
-    final attempts = <ExtractMode>[
+    final pref = ExtractMode.values
+        .where((m) => m.name == SettingsService.I.extractModePref)
+        .firstOrNull;
+    final auto = <ExtractMode>[
       if (pr?.root == true) ExtractMode.root,
       if (pr?.shizuku == true) ExtractMode.shizuku,
       if (pr?.directRead == true) ExtractMode.directRead,
       if (pr?.saf == true) ExtractMode.saf,
+    ];
+    // 用户指定优先（即使探测未就绪也先试一次，失败自动降级到其他通道）
+    final attempts = <ExtractMode>[
+      ?pref,
+      ...auto.where((m) => m != pref),
     ];
     String lastMsg = '';
     for (final m in attempts) {
