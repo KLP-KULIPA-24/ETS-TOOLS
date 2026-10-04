@@ -30,7 +30,7 @@ extension ExtractModeX on ExtractMode {
     ExtractMode.shizuku => '借助 Shizuku 获得高级 API，在非 Root 设备上实现数据提取。真机推荐。',
     ExtractMode.root => '通过 Root 权限直接访问应用私有文件，兼容性最好、权限最高。',
     ExtractMode.directRead => '部分 ROM / 低版本安卓可直接读取 Android/data，无需任何提权工具。',
-    ExtractMode.saf => '用系统存储访问框架授权 E听说 数据目录，免 Root、免电脑，全程系统弹窗。',
+    ExtractMode.saf => '用系统存储访问框架授权 E听说 数据目录，免 Root、免电脑，全程系统弹窗。选 Android/data 或它里面任意一层都可以。',
   };
 }
 

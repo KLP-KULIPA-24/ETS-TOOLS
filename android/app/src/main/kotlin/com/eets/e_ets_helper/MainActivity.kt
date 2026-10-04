@@ -143,14 +143,19 @@ class MainActivity : FlutterActivity() {
                     }
                     "directCopy" -> {
                         val dst = call.argument<String>("dst") ?: ""
+                        // 同 safCopy：拷贝放后台线程，避免占死 UI 线程
                         Thread {
-                            runOnUiThread { result.success(directExtract(dst)) }
+                            val r = directExtract(dst)
+                            runOnUiThread { result.success(r) }
                         }.start()
                     }
                     "safCopy" -> {
                         val dst = call.argument<String>("dst") ?: ""
+                        // 拷贝在后台线程算完，只把结果回主线程——
+                        // 否则整个 SAF 遍历占死 UI 线程，界面卡住十几秒
                         Thread {
-                            runOnUiThread { result.success(safExtract(dst)) }
+                            val r = safExtract(dst)
+                            runOnUiThread { result.success(r) }
                         }.start()
                     }
                     "exec" -> {
@@ -300,22 +305,40 @@ class MainActivity : FlutterActivity() {
     private fun safExtract(dst: String): Map<String, Any> {
         val tree = safTreeUri()
             ?: return mapOf("ok" to false, "files" to 0, "msg" to "尚未授权 SAF 目录")
-        // 定位到 ETS_secondary（或其 resource 子目录）；用户授权的可能是其父目录
         return try {
             val out = File(dst)
             out.deleteRecursively()
             out.mkdirs()
-            var n = 0
-            val rootDoc = DocumentsContract.getTreeDocumentId(tree) // primary:Android/data/...
             val resolver = contentResolver
-            // E听说 完整目录
-            val etsDocId = "$rootDoc".let { id ->
-                if (id.endsWith("com.ets100.secondary")) id
-                else "$id/com.ets100.secondary"
+            val rootDoc = DocumentsContract.getTreeDocumentId(tree)
+            // 用户授权的层级不确定（Android/data、com.ets100.secondary 或更深一层都合法）：
+            // 1) 授权目录本身就在 com.ets100.secondary 里 → 整棵授权子树就是 E听说 数据，直接拷；
+            //    （往上层走不行——SAF 授权只覆盖所选子树）
+            // 2) 授权在其上层 → 按候选路径依次试，哪个能拷到文件用哪个
+            val candidates = mutableListOf<String>()
+            if (rootDoc.contains("com.ets100.secondary")) {
+                candidates.add(rootDoc)
+            } else {
+                candidates.add("$rootDoc/com.ets100.secondary")
+                candidates.add("$rootDoc/Android/data/com.ets100.secondary")
             }
-            val etsUri = DocumentsContract.buildDocumentUriUsingTree(tree, etsDocId)
-            n = safCopyRec(resolver, tree, etsUri, out)
-            mapOf("ok" to (n > 0), "files" to n, "msg" to "SAF 拷贝 $n 个文件")
+            var n = 0
+            var used = rootDoc
+            for (c in candidates) {
+                val uri = DocumentsContract.buildDocumentUriUsingTree(tree, c)
+                n = safCopyRec(resolver, tree, uri, out)
+                if (n > 0) {
+                    used = c
+                    break
+                }
+            }
+            mapOf(
+                "ok" to (n > 0),
+                "files" to n,
+                "msg" to
+                    if (n > 0) "SAF 拷贝 $n 个文件（授权: $used）"
+                    else "SAF 没拷到文件（授权目录: $rootDoc）——请重新授权，选 E听说 的 Android/data 或它里面任意一层",
+            )
         } catch (e: Throwable) {
             mapOf("ok" to false, "files" to 0, "msg" to "SAF 拷贝失败：${e.message}")
         }
