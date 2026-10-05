@@ -466,7 +466,8 @@ class _FloatingNavBarState extends State<_FloatingNavBar>
                                     accent,
                                   )
                                 : accent,
-                            idle: dark ? cs.onSurfaceVariant : cs.onSurfaceVariant,
+                            // 未选中项压暗一点：和点亮的主色拉开层级
+                            idle: cs.onSurfaceVariant.withValues(alpha: 0.78),
                             jitter: w.armed ? i * 0.8 : null,
                           ),
                         ),

@@ -133,10 +133,10 @@ class AppCard extends StatelessWidget {
     final b = Theme.of(context).brightness;
     final dark = b == Brightness.dark;
     final radiusR = BorderRadius.circular(radius);
-    // 内容层**不做玻璃**（style-pack：玻璃只给导航/控制层）：近实体卡片 +
-    // 细边。用户明确反馈过"太模糊、不要这么透明模糊"——内容卡不再垫
-    // BackdropFilter，底色也收成近实体，只留一道极淡的 158° 斜向渐变，
-    // 让卡片和背景有一点点分层感就够了。
+    // 内容层**不做玻璃**（style-pack：玻璃只给导航/控制层）：实底卡片 + 细边。
+    // 用户红线：①不要透明模糊（BackdropFilter 已去掉）②顶端前缘不要任何
+    // 颜色/阴影——此前的"顶缘内高光"渐变在实机上渲染成一条压暗的灰带
+    // （用户连报三次"怎么还有阴影"），已整块删除。
     Widget body = Container(
       padding: padding,
       decoration: BoxDecoration(
@@ -155,10 +155,7 @@ class AppCard extends StatelessWidget {
                           const Color(0xFF1B202C),
                         ),
                       ]
-                    : [
-                        Colors.white.withValues(alpha: 0.97),
-                        Colors.white.withValues(alpha: 0.90),
-                      ],
+                    : [Colors.white, Colors.white.withValues(alpha: 0.96)],
                 stops: const [0, 0.62],
               )
             : null,
@@ -172,21 +169,6 @@ class AppCard extends StatelessWidget {
                   : const Color(0x1F111628)),
         ), // 浅色：灰蓝细边（白边在白底上等于没有）
         boxShadow: AppShadow.card(b),
-      ),
-      // 顶缘内高光（液态玻璃的“边”）：**必须极淡** —— foregroundDecoration 盖在内容之上，
-      // 浅色用白色高 alpha 会把标题/图标/说明文字一起冲淡（“灰蒙蒙”的真凶）
-      foregroundDecoration: BoxDecoration(
-        borderRadius: radiusR,
-        // 网页版的 `inset 0 1px 0 rgba(255,255,255,.9)`：顶缘一道清脆亮边。
-        // 之前摊成 40% 的白雾，反而把标题/图标一起冲淡（"灰蒙蒙"真凶）。
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: dark
-              ? [Colors.white.withValues(alpha: 0.16), Colors.transparent]
-              : [Colors.white.withValues(alpha: 0.62), Colors.transparent],
-          stops: const [0, 0.10],
-        ),
       ),
       child: child,
     );
