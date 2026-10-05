@@ -1,6 +1,6 @@
 import 'dart:io';
 import 'dart:math';
-import 'dart:ui' show ImageFilter;
+import 'dart:ui' show ImageFilter, lerpDouble;
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -305,7 +305,7 @@ class _FloatingNavBar extends StatefulWidget {
 }
 
 class _FloatingNavBarState extends State<_FloatingNavBar>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   /// 选中胶囊当前的横向位置（像素）。松手时用弹簧动画吸附到最近一格，
   /// 拖动时**连续跟随手指**——这是 iOS 26 液态标签栏的关键手感。
   late final AnimationController _spring = AnimationController(
@@ -316,6 +316,14 @@ class _FloatingNavBarState extends State<_FloatingNavBar>
   double _x = 0;
   bool _dragging = false;
   double _itemW = 0;
+
+  /// 拖动放大系数 0→1：按住拖动时胶囊胀大一点，松手弹回
+  /// （液态玻璃的"捏起来"手感，用户指定交互）
+  late final AnimationController _grow = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 180),
+    value: 0,
+  );
 
   static const _items = [
     (Icons.assignment_outlined, Icons.assignment_rounded, '作业'),
@@ -328,6 +336,7 @@ class _FloatingNavBarState extends State<_FloatingNavBar>
   @override
   void dispose() {
     _spring.dispose();
+    _grow.dispose();
     super.dispose();
   }
 
@@ -364,60 +373,74 @@ class _FloatingNavBarState extends State<_FloatingNavBar>
         ? (_x / _itemW).round().clamp(0, n - 1)
         : w.index;
 
-    return GlassContainer(
-      radius: 28,
-      // 用户反馈导航胶囊"太透明模糊"：底色收到近实体，色斑只微微透上来，
-      // 保证图标文字在任何背景段上都读得清
-      color: dark
-          ? const Color(0xFF141A26).withValues(alpha: 0.62)
-          : Colors.white.withValues(alpha: 0.72),
-      border: Border.all(
-        color: dark
-            ? Colors.white.withValues(alpha: 0.14)
-            : StyleTokens.borderOf(b).withValues(alpha: 0.9),
-      ),
-      child: LayoutBuilder(
-        builder: (context, box) {
-          final itemW = box.maxWidth / n;
-          _itemW = itemW;
-          if (!_dragging && !_spring.isAnimating) {
-            // 非拖拽态跟住外部 index（点击切换时由父级改 index）
-            _x = w.index * itemW;
-          }
-          return GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onHorizontalDragStart: (_) => setState(() => _dragging = true),
-            onHorizontalDragUpdate: (d) => _onDragUpdate(d.delta.dx, itemW),
-            onHorizontalDragEnd: (_) => _endDrag(),
-            onHorizontalDragCancel: () {
-              setState(() => _dragging = false);
-              _snapTo(w.index);
-            },
-            // 轻点：胶囊直接弹到点中的那一格
-            onTapDown: (d) => _tapDown = d.localPosition.dx,
-            onTap: () {
-              if (_itemW <= 0) return;
-              final i = (_tapDown / _itemW).floor().clamp(0, n - 1);
-              w.onTap(i);
-              _snapTo(i);
-            },
-            child: SizedBox(
-              height: 62,
-              child: Stack(
-                children: [
-                  // 唯一的选中胶囊：在 Row 之下、随手指连续移动。
-                  // 参考苹果液态玻璃：胶囊本身是磨砂玻璃（模糊 + 顶缘高光 + 细边），
-                  // 不是实色块；选中项内容用主题色（像 Home 的红字）。
-                  Positioned(
-                    left: _x + 4,
-                    top: 7,
-                    bottom: 7,
-                    width: itemW - 8,
+    // 三层结构：玻璃栏底 → 选中胶囊（可溢出栏边）→ 图标文字。
+    // 胶囊必须放在玻璃栏的 ClipRRect 之外，否则放大时会被栏的圆角裁剪
+    // （用户要求：拖动时胶囊要胀出菜单栏边缘一些，松手弹回）。
+    return LayoutBuilder(
+      builder: (context, box) {
+        final itemW = box.maxWidth / n;
+        _itemW = itemW;
+        if (!_dragging && !_spring.isAnimating) {
+          // 非拖拽态跟住外部 index（点击切换时由父级改 index）
+          _x = w.index * itemW;
+        }
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onHorizontalDragStart: (_) {
+            setState(() => _dragging = true);
+            _grow.forward();
+          },
+          onHorizontalDragUpdate: (d) => _onDragUpdate(d.delta.dx, itemW),
+          onHorizontalDragEnd: (_) => _endDrag(),
+          onHorizontalDragCancel: () {
+            setState(() => _dragging = false);
+            _grow.reverse();
+            _snapTo(w.index);
+          },
+          // 轻点：胶囊直接弹到点中的那一格
+          onTapDown: (d) => _tapDown = d.localPosition.dx,
+          onTap: () {
+            if (_itemW <= 0) return;
+            final i = (_tapDown / _itemW).floor().clamp(0, n - 1);
+            w.onTap(i);
+            _snapTo(i);
+          },
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              // 玻璃栏本体（空底，用户反馈"太透明模糊"：底色收到近实体）
+              GlassContainer(
+                radius: 28,
+                color: dark
+                    ? const Color(0xFF141A26).withValues(alpha: 0.62)
+                    : Colors.white.withValues(alpha: 0.72),
+                border: Border.all(
+                  color: dark
+                      ? Colors.white.withValues(alpha: 0.14)
+                      : StyleTokens.borderOf(b).withValues(alpha: 0.9),
+                ),
+                child: const SizedBox(height: 62, width: double.infinity),
+              ),
+              // 唯一的选中胶囊：随手指连续移动，参考苹果液态玻璃——
+              // 磨砂玻璃（模糊+顶缘高光+细边），不是实色块；选中项内容
+              // 用主题色（像 Home 的红字）。拖动时胀大，松手弹回。
+              AnimatedBuilder(
+                animation: _grow,
+                builder: (context, _) {
+                  final g = Curves.easeOutCubic.transform(_grow.value);
+                  final hpad = lerpDouble(4, -2, g)!;
+                  final vpad = lerpDouble(7, 2, g)!;
+                  final grow = lerpDouble(0, 12, g)!;
+                  return Positioned(
+                    left: _x + hpad,
+                    top: vpad,
+                    bottom: vpad,
+                    width: itemW - (8 - grow),
                     child: ClipRRect(
                       // 注意：不能用 AppRadius.capsule（999）——ClipRRect 不像
                       // drawRRect 会自动缩半径，999 套在 48 高的胶囊上裁剪路径
                       // 直接退化，整个填充层都画不出来。48 高全圆 = 24。
-                      borderRadius: BorderRadius.circular(24),
+                      borderRadius: BorderRadius.circular(24 + 2 * g),
                       child: BackdropFilter(
                         filter: ImageFilter.compose(
                           outer: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
@@ -425,7 +448,7 @@ class _FloatingNavBarState extends State<_FloatingNavBar>
                         ),
                         child: DecoratedBox(
                           decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(24),
+                            borderRadius: BorderRadius.circular(24 + 2 * g),
                             // 选中胶囊垫一层灰：白玻璃上再叠白胶囊看不出选中，
                             // 灰底才"托"得住主题色内容（用户反馈：效果不够明显）
                             color: dark
@@ -454,37 +477,40 @@ class _FloatingNavBarState extends State<_FloatingNavBar>
                         ),
                       ),
                     ),
-                  ),
-                  Row(
-                    children: [
-                      for (var i = 0; i < n; i++)
-                        Expanded(
-                          child: _NavItem(
-                            icon: hoverIndex == i ? _items[i].$2 : _items[i].$1,
-                            label: _items[i].$3,
-                            // 胶囊拖动时会同时压住两格：只要被压住就点亮。
-                            // 内容色"提取反色"：玻璃偏亮 → 主题色（深），
-                            // 玻璃偏暗 → 提亮的主题色，保证对比度
-                            active: _lit(i, itemW),
-                            onPrimary: dark
-                                ? Color.alphaBlend(
-                                    Colors.white.withValues(alpha: 0.30),
-                                    accent,
-                                  )
-                                : accent,
-                            // 未选中项压暗一点：和点亮的主色拉开层级
-                            idle: cs.onSurfaceVariant.withValues(alpha: 0.78),
-                            jitter: w.armed ? i * 0.8 : null,
-                          ),
-                        ),
-                    ],
-                  ),
-                ],
+                  );
+                },
               ),
-            ),
-          );
-        },
-      ),
+              // 图标文字浮在胶囊之上（胶囊只垫底，不压内容）
+              Positioned.fill(
+                child: Row(
+                  children: [
+                    for (var i = 0; i < n; i++)
+                      Expanded(
+                        child: _NavItem(
+                          icon: hoverIndex == i ? _items[i].$2 : _items[i].$1,
+                          label: _items[i].$3,
+                          // 胶囊拖动时会同时压住两格：只要被压住就点亮。
+                          // 内容色"提取反色"：玻璃偏亮 → 主题色（深），
+                          // 玻璃偏暗 → 提亮的主题色，保证对比度
+                          active: _lit(i, itemW),
+                          onPrimary: dark
+                              ? Color.alphaBlend(
+                                  Colors.white.withValues(alpha: 0.30),
+                                  accent,
+                                )
+                              : accent,
+                          // 未选中项压暗一点：和点亮的主色拉开层级
+                          idle: cs.onSurfaceVariant.withValues(alpha: 0.78),
+                          jitter: w.armed ? i * 0.8 : null,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -505,10 +531,12 @@ class _FloatingNavBarState extends State<_FloatingNavBar>
   void _endDrag() {
     if (_itemW <= 0) {
       setState(() => _dragging = false);
+      _grow.reverse();
       return;
     }
     final target = (_x / _itemW).round().clamp(0, _items.length - 1);
     setState(() => _dragging = false);
+    _grow.reverse(); // 松手弹回原尺寸
     if (target != widget.index) widget.onTap(target);
     _snapTo(target);
   }
