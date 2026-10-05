@@ -292,11 +292,22 @@ html[data-theme="light"] .feat-card {
   width: 56px; height: 56px; border-radius: 15px;
   box-shadow: 0 10px 30px color-mix(in srgb, var(--primary) 26%, transparent);
 }
+/* 名称 + 版本徽章并排一行 */
+.curtain-mark-row {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: center;
+}
 .curtain-mark strong {
   font-size: clamp(28px, 3.4vw, 44px); font-weight: 600; letter-spacing: -.02em;
   color: var(--text); line-height: 1.1;
 }
-.curtain-mark span { font-size: 15px; color: var(--muted); letter-spacing: .02em; }
+/* 版本徽章：与顶栏 .nav-ver 同一套观感，放大一档配得上开场幕 */
+.curtain-ver {
+  font-size: 15px; font-weight: 600; color: var(--primary);
+  padding: 5px 14px; border-radius: 999px;
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--primary) 28%, transparent);
+}
+.curtain-sub { font-size: 15px; color: var(--muted); letter-spacing: .02em; }
 @keyframes curtainUp {
   0%   { opacity: 1; }
   72%  { opacity: 1; }
@@ -1053,11 +1064,14 @@ html.theming, html.theming *, html.theming *::before, html.theming *::after {
 
 <!-- 全局层：开场揭幕 / 滚动进度 / 光标柔光 -->
 <div id="curtain" aria-hidden="true">
-  <!-- 开场幕标识：图标 + 名称 + 一行核心功能，随幕布一起淡出 -->
+  <!-- 开场幕标识：图标 + 名称 + 版本徽章 + 一行核心功能，随幕布一起淡出 -->
   <div class="curtain-mark">
     <img class="curtain-mark-ic" src="./assets/app-icon.png" alt="" width="56" height="56" />
-    <strong>E听说助手</strong>
-    <span>答案 · 成绩修改 · AI 解析</span>
+    <div class="curtain-mark-row">
+      <strong>E听说助手</strong>
+      <span class="curtain-ver">V0.8.2</span>
+    </div>
+    <span class="curtain-sub">答案 · 成绩修改 · AI 解析</span>
   </div>
 </div>
 <div id="scrollProgress" aria-hidden="true"></div>
