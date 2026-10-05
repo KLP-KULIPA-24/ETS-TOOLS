@@ -32,11 +32,18 @@ Future<void> showFloatingSettingsSheet(BuildContext context) {
               children: [
                 Row(
                   children: [
-                    Icon(Icons.picture_in_picture_alt_rounded,
-                        size: 18, color: cs.primary),
+                    Icon(
+                      Platform.isWindows
+                          ? Icons.desktop_windows_outlined
+                          : Icons.picture_in_picture_alt_rounded,
+                      size: 18,
+                      color: cs.primary,
+                    ),
                     const SizedBox(width: 8),
                     Text(
-                      '悬浮窗',
+                      // 电脑端没有悬浮球，只有窗口置顶/快捷键——标题跟着平台走，
+                      // 免得在电脑上看到"悬浮窗"字样（用户：电脑不要出现悬浮窗的功能设置）
+                      Platform.isWindows ? '窗口' : '悬浮窗',
                       style: TextStyle(
                         fontSize: 15,
                         fontWeight: AppText.wBold,
@@ -45,6 +52,9 @@ Future<void> showFloatingSettingsSheet(BuildContext context) {
                   ],
                 ),
                 const SizedBox(height: 14),
+                // 悬浮球控制（大小/不透明度/配色/开合）只在安卓出：
+                // 电脑端的悬浮窗功能早已下架，摆出来就是一堆按不动的死控件
+                if (!Platform.isWindows) ...[
                 // 大小：悬浮球直径（与不透明度一样是滑杆）
                 Row(
                   children: [
@@ -104,7 +114,28 @@ Future<void> showFloatingSettingsSheet(BuildContext context) {
                   selected: {s.floatingTheme},
                   onSelectionChanged: (v) => s.setFloatingTheme(v.first),
                 ),
-                const SizedBox(height: 14),
+                // 立即开合也是安卓专属：控制的是悬浮球
+                const SizedBox(height: 12),
+                FilledButton.tonalIcon(
+                  onPressed: () async {
+                    final (ok, _) = await FloatingBridge.toggleAndroidOverlay();
+                    if (!context.mounted) return;
+                    if (!ok) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            '未获得悬浮窗权限：请在系统设置里允许'
+                            '「显示在其他应用上层」',
+                          ),
+                        ),
+                      );
+                    }
+                  },
+                  icon: const Icon(Icons.open_in_new_rounded, size: 18),
+                  label: const Text('显示 / 隐藏悬浮窗'),
+                ),
+                ], // end of !Platform.isWindows（悬浮球专属）
+                const SizedBox(height: 4),
                 // 电脑端：窗口置顶 + 快捷键
                 if (Platform.isWindows) ...[
                   SwitchListTile(
@@ -136,26 +167,6 @@ Future<void> showFloatingSettingsSheet(BuildContext context) {
                     },
                   ),
                 ],
-                const SizedBox(height: 6),
-                // 立即开合
-                FilledButton.tonalIcon(
-                  onPressed: () async {
-                    final (ok, _) = await FloatingBridge.toggleAndroidOverlay();
-                    if (!context.mounted) return;
-                    if (!ok) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                            '未获得悬浮窗权限：请在系统设置里允许'
-                            '「显示在其他应用上层」',
-                          ),
-                        ),
-                      );
-                    }
-                  },
-                  icon: const Icon(Icons.open_in_new_rounded, size: 18),
-                  label: const Text('显示 / 隐藏悬浮窗'),
-                ),
               ],
             ),
           ),

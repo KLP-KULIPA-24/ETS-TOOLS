@@ -102,12 +102,15 @@ class _KtvTextState extends State<KtvText> {
   /// 当前播放位置对应的句子索引
   int _indexAt(double pos) {
     final segs = _segs;
+    if (segs.isEmpty) return -1;
+    // 首句起点之前也算首句：显式时间轴的首句 begin 常大于 0，
+    // 之前这里落空返回 -1，表现就是"第一句没法跟读高亮"
+    if (pos < segs.first.begin) return 0;
     for (var i = 0; i < segs.length; i++) {
       if (pos >= segs[i].begin && pos < segs[i].end) return i;
     }
-    // 落在所有时间轴之外：已播完则停在最后一句，否则未开始
-    if (segs.isNotEmpty && pos > segs.last.end) return segs.length - 1;
-    return -1;
+    // 落在所有时间轴之外：已播完则停在最后一句
+    return segs.length - 1;
   }
 
   /// 完整原文（清洗 HTML + 空白归一）
@@ -117,6 +120,7 @@ class _KtvTextState extends State<KtvText> {
         : widget.segments.map((s) => s.text).join(' ');
     return src
         .replaceAll(RegExp(r'</p>\s*<p>'), '. ')
+      .replaceAll(RegExp(r'\n+'), '. ')
         .replaceAll(RegExp(r'<[^>]+>'), ' ')
         .replaceAll(RegExp(r'\s+'), ' ')
         .trim()
@@ -203,6 +207,7 @@ class _KtvTextState extends State<KtvText> {
 List<SentenceSeg> sentencesByProportion(String text, double durationSec) {
   final raw = text
       .replaceAll(RegExp(r'</p>\s*<p>'), '. ')
+      .replaceAll(RegExp(r'\n+'), '. ')
       .replaceAll(RegExp(r'<[^>]+>'), ' ')
       .replaceAll(RegExp(r'\s+'), ' ')
       .trim();

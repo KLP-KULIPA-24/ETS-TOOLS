@@ -27,6 +27,10 @@ class _InlineAudioButtonState extends State<InlineAudioButton> {
   // 实例身份：同一份录音被多道题引用时，只有发起播放的那个按钮高亮
   late final int _owner = ++_seq;
 
+  // 拖动中的临时位置：不为空时优先于流里的 position，
+  // 否则 seek 引发的流更新会把手势打回原位（表现就是"拖不动"）
+  double? _dragPos;
+
   static String _hms(Duration d) {
     final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
     final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
@@ -95,10 +99,20 @@ class _InlineAudioButtonState extends State<InlineAudioButton> {
                         overlayColor: cs.primary.withValues(alpha: 0.18),
                       ),
                       child: Slider(
-                        value: cur.toDouble(),
+                        // 拖动期间用本地临时值，松手才交回播放器的真实位置
+                        value: (_dragPos ?? cur.toDouble()).clamp(
+                          0,
+                          total.toDouble(),
+                        ),
                         max: total.toDouble(),
-                        onChanged: (v) =>
-                            AudioPlayerService.I.seek(v.toDouble()),
+                        onChanged: (v) {
+                          setState(() => _dragPos = v);
+                          AudioPlayerService.I.seek(v);
+                        },
+                        onChangeEnd: (v) {
+                          AudioPlayerService.I.seek(v);
+                          if (mounted) setState(() => _dragPos = null);
+                        },
                       ),
                     ),
                   ),

@@ -347,7 +347,9 @@ class FloatingBall(private val context: Context) {
         darkMode: Boolean = false,
         themeAccent: Int = 0xFF4F7CFF.toInt(),
     ): Boolean {
-        if (!hasPermission()) return false
+        // 不在开头用 hasPermission() 短路：canDrawOverlays() 在部分 ROM 上会**误报 false**，
+        // 一短路就永远走不到 addView，表现为"正式版悬浮窗点了没反应"。
+        // 这里直接尝试 addView，失败了再由调用方走授权流程。
         theme = themeMode
         dark = darkMode
         accent = themeAccent

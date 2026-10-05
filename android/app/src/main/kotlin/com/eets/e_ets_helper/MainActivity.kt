@@ -98,23 +98,24 @@ class MainActivity : FlutterActivity() {
                             if (size > 0) {
                                 floating.applyStyle(size, opacity, theme, accent)
                             }
-                            if (!floating.hasPermission()) {
-                                // 未授权：直接拉起系统"显示在其他应用上层"设置页
+                            // 先直接尝试显示：canDrawOverlays() 在部分 ROM 会误报 false，
+                            // 未授权就先拦会误伤已授权用户（"正式版悬浮窗点了没反应"）。
+                            // 真失败了才判权限并拉起系统授权页。
+                            val ok = floating.show(
+                                title,
+                                answers,
+                                partsJson,
+                                theme,
+                                darkMode,
+                                accent,
+                            )
+                            if (ok) {
+                                result.success("ok")
+                            } else if (!floating.hasPermission()) {
                                 floating.openPermissionSettings()
                                 result.success("noPermission")
                             } else {
-                                result.success(
-                                    if (floating.show(
-                                            title,
-                                            answers,
-                                            partsJson,
-                                            theme,
-                                            darkMode,
-                                            accent,
-                                        )
-                                    ) "ok"
-                                    else "failed",
-                                )
+                                result.success("failed")
                             }
                         }
                     }

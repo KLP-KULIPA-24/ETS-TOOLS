@@ -42,6 +42,11 @@ class TtsService {
   /// 避免全局进度条让列表里每一行都跟着动
   final ValueNotifier<String> currentText = ValueNotifier('');
 
+  /// 当前朗读发起者的身份号（每个按钮一个，发起时传入）。
+  /// 只靠文本判断会串台：两句话文本相同时会一起亮；
+  /// 只看 [speaking] 更是全局都跟着变。
+  final ValueNotifier<int> currentOwner = ValueNotifier(-1);
+
   /// 朗读进度 0–1，来自播放器的真实 position/duration（不再是按时长估算）
   final ValueNotifier<double> progress = ValueNotifier(0);
 
@@ -80,7 +85,7 @@ class TtsService {
   }
 
   /// 朗读一段文本；返回是否真的发起了朗读（false = 合成失败）
-  Future<bool> speak(String text) async {
+  Future<bool> speak(String text, {int owner = -1}) async {
     final t = text.trim();
     if (t.isEmpty || _busy) return false;
     _busy = true;
@@ -100,6 +105,7 @@ class TtsService {
 
       speaking.value = true;
       currentText.value = text;
+      currentOwner.value = owner;
       await _player.setAudioSource(AudioSource.file(file.path));
       await _player.setSpeed(rateLabel.value);
       await _player.play();
@@ -110,6 +116,7 @@ class TtsService {
       progress.value = 0;
       if (speaking.value) speaking.value = false;
       currentText.value = '';
+      currentOwner.value = -1;
       return false;
     } finally {
       _busy = false;
@@ -156,15 +163,17 @@ class TtsService {
     } catch (_) {}
     progress.value = 0;
     if (speaking.value) speaking.value = false;
+    currentOwner.value = -1;
   }
 
   /// 朗读或停止（按钮行为）。正在读别的内容时直接切换到新文本，
-  /// 不用先点一次停止（旧行为：只会停掉当前朗读，得再点一次才开始读新的）
-  Future<bool> toggle(String text) async {
-    if (speaking.value && currentText.value == text) {
+  /// 不用先点一次停止（旧行为：只会停掉当前朗读，得再点一次才开始读新的）。
+  /// [owner] 是发起按钮的身份号：只有"本条"按钮才显示停止态，避免串台。
+  Future<bool> toggle(String text, {int owner = -1}) async {
+    if (speaking.value && currentOwner.value == owner && owner != -1) {
       await stop();
       return false;
     }
-    return speak(text);
+    return speak(text, owner: owner);
   }
 }

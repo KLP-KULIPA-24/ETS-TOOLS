@@ -711,113 +711,11 @@ class _TypedContentViewState extends State<TypedContentView> {
     );
   }
 
-  /// 播放/停止某一份范文：播放时展开进度条 + KTV 逐句高亮
   /// TTS 朗读按钮：只在"本条"朗读中切换为停止图标（列表里多个按钮互不串扰）；
-  /// 用微软 Edge 在线神经语音；合成失败（如断网）给出真实原因，而不是"点了没反应"
-  Widget _ttsBtn(String text, {String tip = '朗读'}) {
-    final available = TtsService.I.available;
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        AnimatedBuilder(
-          animation: Listenable.merge([
-            TtsService.I.speaking,
-            TtsService.I.currentText,
-          ]),
-          builder: (context, _) {
-            final on =
-                TtsService.I.speaking.value &&
-                TtsService.I.currentText.value == text;
-            return IconButton(
-              tooltip: on ? '停止朗读' : tip,
-              iconSize: 20,
-              visualDensity: VisualDensity.compact,
-              onPressed: () async {
-                final messenger = ScaffoldMessenger.of(context);
-                final ok = await TtsService.I.toggle(text);
-                if (!ok) {
-                  final err = TtsService.I.lastError.value;
-                  messenger.showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        err.isEmpty
-                            ? '无法生成朗读：检查网络后重试；'
-                                  '带原版录音的句子/单词可以直接播放'
-                            : '$err；带原版录音的句子/单词可以直接播放',
-                      ),
-                    ),
-                  );
-                }
-              },
-              icon: Icon(
-                on
-                    ? Icons.stop_circle_rounded
-                    : Icons.record_voice_over_rounded,
-                color: available ? null : Theme.of(context).colorScheme.outline,
-              ),
-            );
-          },
-        ),
-        // 朗读中：进度条（估算）+ 倍速（点按循环）——同样只在"本条"显示
-        AnimatedBuilder(
-          animation: Listenable.merge([
-            TtsService.I.speaking,
-            TtsService.I.currentText,
-          ]),
-          builder: (context, _) {
-            final on =
-                TtsService.I.speaking.value &&
-                TtsService.I.currentText.value == text;
-            if (!on) return const SizedBox.shrink();
-            final cs = Theme.of(context).colorScheme;
-            return Padding(
-              padding: const EdgeInsets.only(top: 2),
-              // 固定宽：在 Row 里展开不挤压相邻文字
-              child: SizedBox(
-                width: 180,
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: ValueListenableBuilder<double>(
-                        valueListenable: TtsService.I.progress,
-                        builder: (context, p, _) => ClipRRect(
-                          borderRadius: BorderRadius.circular(999),
-                          child: LinearProgressIndicator(
-                            value: p,
-                            minHeight: 4,
-                            backgroundColor: cs.primary.withValues(alpha: 0.15),
-                            color: cs.primary,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    ValueListenableBuilder<double>(
-                      valueListenable: TtsService.I.rateLabel,
-                      builder: (context, r, _) => InkWell(
-                        borderRadius: BorderRadius.circular(8),
-                        onTap: () => TtsService.I.cycleRate(),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 2,
-                          ),
-                          child: Text(
-                            '${r}x',
-                            style: TextStyle(fontSize: 11, color: cs.primary),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        ),
-      ],
-    );
-  }
+  /// 用微软 Edge 在线神经语音；合成失败（如断网）给出真实原因，而不是"点了没反应"。
+  /// 归属判定走 owner 身份号（不是文本），同文本的两句也不会串台。
+  Widget _ttsBtn(String text, {String tip = '朗读'}) =>
+      _TtsButton(text: text, tip: tip);
 
   Future<void> _playStd(int i, String file) async {
     final ps = AudioPlayerService.I;
@@ -1436,32 +1334,10 @@ class _QCardState extends State<_QCard> {
 
   String _mp3(String f) => f.isEmpty ? '' : '${widget.dir}/material/$f';
 
-  /// 三问问句 TTS（该数据中问句录音为空时的兜底）
-  Widget _askTtsBtn(BuildContext context, String text, String tip) {
-    final cs = Theme.of(context).colorScheme;
-    final messenger = ScaffoldMessenger.of(context);
-    return ValueListenableBuilder<bool>(
-      valueListenable: TtsService.I.speaking,
-      builder: (context, on, _) => IconButton(
-        tooltip: on ? '停止朗读' : tip,
-        iconSize: 20,
-        visualDensity: VisualDensity.compact,
-        onPressed: () async {
-          final ok = await TtsService.I.toggle(text);
-          if (!ok) {
-            final err = TtsService.I.lastError.value;
-            messenger.showSnackBar(
-              SnackBar(content: Text(err.isEmpty ? '朗读失败，请检查网络' : err)),
-            );
-          }
-        },
-        icon: Icon(
-          on ? Icons.stop_circle_rounded : Icons.record_voice_over_rounded,
-          color: on ? cs.primary : null,
-        ),
-      ),
-    );
-  }
+  /// 三问问句 TTS（该数据中问句录音为空时的兜底）。
+  /// 走 _TtsButton 的 owner 归属：只看 speaking 会让所有按钮一起变停止态。
+  Widget _askTtsBtn(BuildContext context, String text, String tip) =>
+      _TtsButton(text: text, tip: tip);
 
   @override
   Widget build(BuildContext context) {
@@ -1814,6 +1690,10 @@ class _SentenceListViewState extends State<SentenceListView> {
   Timer? _ticker;
   double _pos = 0;
 
+  // 每句一个朗读归属号：同文本的两句也各自独立，按钮状态不串台
+  final Map<int, int> _ttsOwner = {};
+  int _ownerOf(int i) => _ttsOwner.putIfAbsent(i, _nextTtsOwner);
+
   @override
   void initState() {
     super.initState();
@@ -1846,7 +1726,7 @@ class _SentenceListViewState extends State<SentenceListView> {
               style: Theme.of(context).textTheme.labelSmall,
             ),
       children: [
-        for (final s in widget.sentences)
+        for (final (si, s) in widget.sentences.indexed)
           Builder(
             builder: (context) {
               final active =
@@ -1933,13 +1813,14 @@ class _SentenceListViewState extends State<SentenceListView> {
                             animation: Listenable.merge([
                               TtsService.I.speaking,
                               TtsService.I.progress,
-                              TtsService.I.currentText,
+                              TtsService.I.currentOwner,
                             ]),
                             builder: (context, _) {
                               final sp = TtsService.I.speaking.value;
                               final pr = TtsService.I.progress.value;
                               final mine =
-                                  TtsService.I.currentText.value == s.text;
+                                  TtsService.I.currentOwner.value ==
+                                  _ownerOf(si);
                               final active = sp && mine; // 正在读本句
                               final done = !sp && mine && pr >= 1; // 刚读完本句
                               return Row(
@@ -1960,7 +1841,10 @@ class _SentenceListViewState extends State<SentenceListView> {
                                   const SizedBox(width: 8),
                                   InkWell(
                                     borderRadius: BorderRadius.circular(6),
-                                    onTap: () => TtsService.I.toggle(s.text),
+                                    onTap: () => TtsService.I.toggle(
+                                      s.text,
+                                      owner: _ownerOf(si),
+                                    ),
                                     child: Padding(
                                       padding: const EdgeInsets.symmetric(
                                         horizontal: 6,
@@ -1986,17 +1870,20 @@ class _SentenceListViewState extends State<SentenceListView> {
                     AnimatedBuilder(
                       animation: Listenable.merge([
                         TtsService.I.speaking,
-                        TtsService.I.currentText,
+                        TtsService.I.currentOwner,
                       ]),
                       builder: (context, _) {
                         final active =
                             TtsService.I.speaking.value &&
-                            TtsService.I.currentText.value == s.text;
+                            TtsService.I.currentOwner.value == _ownerOf(si);
                         return IconButton(
                           tooltip: active ? '暂停朗读' : '朗读本句',
                           visualDensity: VisualDensity.compact,
                           iconSize: 20,
-                          onPressed: () => TtsService.I.toggle(s.text),
+                          onPressed: () => TtsService.I.toggle(
+                            s.text,
+                            owner: _ownerOf(si),
+                          ),
                           icon: Icon(
                             active
                                 ? Icons.pause_circle_rounded
@@ -2012,6 +1899,125 @@ class _SentenceListViewState extends State<SentenceListView> {
             },
           ),
       ],
+    );
+  }
+}
+
+/// TTS 朗读按钮（带归属身份号）：只有发起朗读的那个按钮显示停止态。
+/// 早先用"文本是否相等"判断归属，两句话文本一样就会一起亮；
+/// 只看 speaking 更糟，列表里每个按钮都跟着变。
+int _ttsOwnerSeq = 0;
+int _nextTtsOwner() => ++_ttsOwnerSeq;
+
+class _TtsButton extends StatefulWidget {
+  final String text;
+  final String tip;
+  const _TtsButton({required this.text, this.tip = '朗读'});
+
+  @override
+  State<_TtsButton> createState() => _TtsButtonState();
+}
+
+class _TtsButtonState extends State<_TtsButton> {
+  late final int _owner = _nextTtsOwner();
+
+  bool get _mine =>
+      TtsService.I.speaking.value && TtsService.I.currentOwner.value == _owner;
+
+  @override
+  Widget build(BuildContext context) {
+    final available = TtsService.I.available;
+    final cs = Theme.of(context).colorScheme;
+    return AnimatedBuilder(
+      animation: Listenable.merge([
+        TtsService.I.speaking,
+        TtsService.I.currentOwner,
+      ]),
+      builder: (context, _) {
+        final on = _mine;
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              tooltip: on ? '停止朗读' : widget.tip,
+              iconSize: 20,
+              visualDensity: VisualDensity.compact,
+              onPressed: () async {
+                final messenger = ScaffoldMessenger.of(context);
+                final ok = await TtsService.I.toggle(
+                  widget.text,
+                  owner: _owner,
+                );
+                if (!ok && context.mounted) {
+                  final err = TtsService.I.lastError.value;
+                  messenger.showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        err.isEmpty
+                            ? '无法生成朗读：检查网络后重试；'
+                                  '带原版录音的句子/单词可以直接播放'
+                            : '$err；带原版录音的句子/单词可以直接播放',
+                      ),
+                    ),
+                  );
+                }
+              },
+              icon: Icon(
+                on
+                    ? Icons.stop_circle_rounded
+                    : Icons.record_voice_over_rounded,
+                color: available ? null : cs.outline,
+              ),
+            ),
+            // 朗读中：进度条 + 倍速——同样只在"本条"显示
+            if (on)
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: SizedBox(
+                  width: 180,
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: ValueListenableBuilder<double>(
+                          valueListenable: TtsService.I.progress,
+                          builder: (context, p, _) => ClipRRect(
+                            borderRadius: BorderRadius.circular(999),
+                            child: LinearProgressIndicator(
+                              value: p,
+                              minHeight: 4,
+                              backgroundColor: cs.primary.withValues(
+                                alpha: 0.15,
+                              ),
+                              color: cs.primary,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      ValueListenableBuilder<double>(
+                        valueListenable: TtsService.I.rateLabel,
+                        builder: (context, r, _) => InkWell(
+                          borderRadius: BorderRadius.circular(8),
+                          onTap: () => TtsService.I.cycleRate(),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            child: Text(
+                              '${r}x',
+                              style: TextStyle(fontSize: 11, color: cs.primary),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
     );
   }
 }

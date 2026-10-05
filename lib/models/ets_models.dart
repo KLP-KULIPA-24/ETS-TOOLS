@@ -7,6 +7,20 @@ library;
 import 'dart:convert';
 import 'dart:io';
 
+/// 清掉 E听说 富文本残留标记（`</br>` `<br/>` `</p><p>` `<p>` 等）。
+/// 纯字符串工具，放在模型层是因为解析入口就要洗干净——
+/// 早先只在个别显示处清洗，漏掉的地方就会露出 `</br>` 这种后缀。
+String etsCleanHtml(String raw) {
+  if (!raw.contains('<')) return raw.trim();
+  return raw
+      .replaceAll('\r\n', '\n')
+      .replaceAll(RegExp(r'</?br\s*/?>', caseSensitive: false), '\n')
+      .replaceAll(RegExp(r'</p>\s*<p>', caseSensitive: false), '\n')
+      .replaceAll(RegExp(r'<[^>]+>'), '')
+      .replaceAll(RegExp(r'\n{3,}'), '\n\n')
+      .trim();
+}
+
 /// 题型枚举（structure_type / collector.*）
 /// 顺序 = 筛选条展示顺序，按真实考试菜单：模仿朗读 → 角色扮演 → 故事复述
 enum EtsStructure {
@@ -86,8 +100,8 @@ class StdAnswer {
   final String audio; // 相对 material 目录
   const StdAnswer({required this.value, required this.ai, required this.audio});
   static StdAnswer fromJson(Map<String, dynamic> j) => StdAnswer(
-    value: '${j['value'] ?? ''}',
-    ai: '${j['ai'] ?? ''}',
+    value: etsCleanHtml('${j['value'] ?? ''}'),
+    ai: etsCleanHtml('${j['ai'] ?? ''}'),
     audio: '${j['audio'] ?? ''}',
   );
 }
@@ -122,19 +136,20 @@ class EtsQuestion {
 
   static EtsQuestion fromJson(Map<String, dynamic> j) => EtsQuestion(
     xh: '${j['xh'] ?? ''}',
-    ask: '${j['ask'] ?? ''}',
-    answer: '${j['answer'] ?? ''}',
+    ask: etsCleanHtml('${j['ask'] ?? ''}'),
+    answer: etsCleanHtml('${j['answer'] ?? ''}'),
     askAudio: '${j['askaudio'] ?? ''}',
     aswAudio: '${j['aswaudio'] ?? ''}',
     sucai: '${j['sucai'] ?? ''}',
-    keywords: '${j['keywords'] ?? ''}',
+    keywords: etsCleanHtml('${j['keywords'] ?? ''}'),
     role: '${j['role'] ?? ''}',
-    analyze: '${j['analyze'] ?? ''}',
+    analyze: etsCleanHtml('${j['analyze'] ?? ''}'),
     std: ((j['std'] as List?) ?? [])
         .whereType<Map>()
         .map((e) => StdAnswer.fromJson(e.cast<String, dynamic>()))
         .toList(),
-    ref: ((j['ref'] as List?) ?? []).map((e) => '$e').toList(),
+    ref:
+        ((j['ref'] as List?) ?? []).map((e) => etsCleanHtml('$e')).toList(),
   );
 
   List<String> get keywordList =>
