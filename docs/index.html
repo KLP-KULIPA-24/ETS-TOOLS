@@ -274,15 +274,27 @@ html[data-theme="light"] .feat-card {
   position: fixed; inset: 0; z-index: 200; pointer-events: none;
   background: var(--bg);
   display: grid; place-items: center;
-  animation: curtainUp 1100ms cubic-bezier(.16,1,.3,1) forwards;
+  /* 幕布本身也要慢下来：字还没走完幕就撤了，观感就是"字唰一下没了" */
+  animation: curtainUp 1900ms cubic-bezier(.4,0,.2,1) forwards;
 }
 .curtain-mark {
   font-size: clamp(28px, 3.4vw, 44px); font-weight: 600; letter-spacing: -.02em;
   color: var(--text);
-  animation: curtainMark 700ms cubic-bezier(.16,1,.3,1) forwards;
+  /* 入场→停留→缓缓淡出三段，不再是"出现即消失" */
+  animation: curtainMark 1900ms cubic-bezier(.22,1,.36,1) forwards;
 }
-@keyframes curtainUp { to { opacity: 0; visibility: hidden; } }
-@keyframes curtainMark { to { opacity: 0; transform: translateY(-10px); } }
+@keyframes curtainUp {
+  0%   { opacity: 1; }
+  72%  { opacity: 1; }
+  100% { opacity: 0; visibility: hidden; }
+}
+@keyframes curtainMark {
+  0%   { opacity: 0; transform: scale(.94); filter: blur(8px); }
+  16%  { opacity: 1; transform: scale(1);    filter: blur(0); }
+  58%  { opacity: 1; transform: scale(1);    filter: blur(0); }
+  78%  { opacity: .85; transform: scale(1.015); }
+  100% { opacity: 0;   transform: scale(1.06) translateY(-14px); filter: blur(5px); }
+}
 
 #scrollProgress {
   position: fixed; top: 0; left: 0; height: 2px; width: 0; z-index: 120;
@@ -1418,9 +1430,16 @@ html.theming, html.theming *, html.theming *::before, html.theming *::after {
   var manual = null;
   try { manual = localStorage.getItem('ets-theme'); } catch (e) {}
 
+  /* 图标表示"当前是什么主题"：浅色=月亮（点我去暗色），暗色=太阳（点我去浅色）。
+     这段脚本跑在文档前面时 themeIcon 还是 null，图标会一直停在写死的月亮，
+     只有手动点一次才同步——和 dlSheet 那次同一个坑。 */
+  function syncThemeIcon() {
+    var el = document.getElementById('themeIcon');
+    if (el) el.setAttribute('href', root.dataset.theme === 'light' ? '#i-moon' : '#i-sun');
+  }
   function applyTheme(name) {
     root.dataset.theme = name;
-    if (themeIcon) themeIcon.setAttribute('href', name === 'light' ? '#i-moon' : '#i-sun');
+    syncThemeIcon();
     var meta = document.querySelector('meta[name="theme-color"]');
     if (meta) meta.setAttribute('content', name === 'light' ? '#F5F6F8' : '#0F1115');
     /* 切换时启用全局颜色过渡（只动颜色属性，不碰 transform） */
@@ -1430,6 +1449,12 @@ html.theming, html.theming *, html.theming *::before, html.theming *::after {
     themeHooks.forEach(function (fn) { fn(name); });
   }
   applyTheme(manual || (mqLight.matches ? 'light' : 'dark'));
+  // 元素解析完再同步一次图标（初始那遍很可能拿到的是 null）
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', syncThemeIcon, { once: true });
+  } else {
+    syncThemeIcon();
+  }
 
   if (themeBtn) themeBtn.addEventListener('click', function () {
     var next = root.dataset.theme === 'light' ? 'dark' : 'light';
@@ -1668,6 +1693,28 @@ html.theming, html.theming *, html.theming *::before, html.theming *::after {
     var pvText = document.getElementById('vPrevT');
     var pvCtx = pvCanvas.getContext('2d');
     var pvLastAt = 0;
+    var pvSeekTo = -1;      // 待定位的目标时间
+    var pvSavedTime = 0;    // 悬停前的播放位置
+    var pvWasPlaying = false;
+    var pvPendingRatio = null;
+
+    /* 预览必须画"指针所指那一时刻"的画面，而不是主视频当前帧。
+       早前用隐藏副 video 预 seek 目标帧——两个解码器同时解同一个 38MB 文件，
+       主视频直接被拖卡。现在改成：悬停时把**主 video 自己**seek 到目标时间
+       取帧（单解码器，不翻倍），移开时恢复到悬停前的位置与播放状态。 */
+    function pvSeekFrame(ratio) {
+      var t = ratio * demoVideo.duration;
+      pvSeekTo = t;
+      if (Math.abs(demoVideo.currentTime - t) < 0.08) {
+        pvSeekTo = -1;
+        drawFrame();
+        return;
+      }
+      demoVideo.currentTime = t;
+    }
+    function drawFrame() {
+      try { pvCtx.drawImage(demoVideo, 0, 0, pvCanvas.width, pvCanvas.height); } catch (e) {}
+    }
     function showPreviewAt(e) {
       if (!pvBox || !demoVideo.duration) return;
       var rect = vTrack.getBoundingClientRect();
@@ -1678,12 +1725,34 @@ html.theming, html.theming *, html.theming *::before, html.theming *::after {
       pvText.textContent = fmt(ratio * demoVideo.duration);
       pvBox.classList.add('show');
       var now = performance.now();
-      if (now - pvLastAt > 250) {
+      if (now - pvLastAt > 120) {
         pvLastAt = now;
-        try { pvCtx.drawImage(demoVideo, 0, 0, pvCanvas.width, pvCanvas.height); } catch (e) {}
+        pvPendingRatio = ratio;
+        // 只在第一次 hover 时记录现场，之后每次只更新目标时间
+        if (pvSeekTo < 0 && !pvWasPlaying && demoVideo.paused === false) {
+          pvWasPlaying = true; pvSavedTime = demoVideo.currentTime;
+          demoVideo.pause();
+        }
+        if (pvSavedTime === 0 && demoVideo.paused) { pvSavedTime = demoVideo.currentTime; }
+        pvSeekFrame(ratio);
       }
     }
-    function hidePreview() { if (pvBox) pvBox.classList.remove('show'); }
+    function hidePreview() {
+      if (pvBox) pvBox.classList.remove('show');
+      // 恢复现场：回到悬停前的位置，原本在播就继续播
+      if (pvSeekTo >= 0 || pvWasPlaying) {
+        try { demoVideo.currentTime = pvSavedTime; } catch (e) {}
+        if (pvWasPlaying) { var p = demoVideo.play(); if (p && p.catch) p.catch(function(){}); }
+      }
+      pvSeekTo = -1;
+      pvWasPlaying = false;
+      pvPendingRatio = null;
+    }
+    demoVideo.addEventListener('seeked', function () {
+      if (pvSeekTo < 0) return;
+      pvSeekTo = -1;
+      drawFrame();
+    });
 
     /* ---------- 下载弹层：两种入口共用一个 sheet ----------
        渠道卡「前往下载」→ 列 3 个版本（该渠道自己的链接）
