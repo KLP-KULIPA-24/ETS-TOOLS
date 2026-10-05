@@ -12,13 +12,15 @@
 - 禁止：同屏出现 3 个以上同权重卡片堆叠
 
 ## 输入框
-- 背景 surface，border 1px，圆角 12px（连续圆角）
-- focus 时 border 变 primary，不加外发光
+- 背景 surface，border 1px，圆角与控制族一致（胶囊，见 tokens.json radius.control）
+- focus 时 border 变 **实色** primary，不加外发光
 
 ## 工具栏/导航栏（Liquid Glass 层）
-- 使用 backdrop-filter: blur(20px) + saturate(180%)
-- 背景 glassTint
+- 使用 backdrop-filter: blur(20px) + **saturate(180%)**
+- 背景 glassTint（浅色 rgba(255,255,255,.55)）
+- 顶缘加一道 inset 1px 内高光，玻璃的"边"才立得住
 - 必须启用交互反馈（按压缩放）
+- App 端实现见 `lib/widgets/glass.dart` 的 `GlassContainer`（全项目唯一的玻璃原语）
 
 ## 间距
 - 组件内 8/12，组件间 16/24，区块间 32/48

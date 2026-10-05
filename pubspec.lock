@@ -129,6 +129,14 @@ packages:
       url: "https://pub.flutter-io.cn"
     source: hosted
     version: "0.7.15"
+  edge_tts:
+    dependency: "direct main"
+    description:
+      name: edge_tts
+      sha256: "1f7d2c6ba18bde1eeb99c3161c11972c8d79de3f3eb840dedaf4ea161dbc4c6a"
+      url: "https://pub.flutter-io.cn"
+    source: hosted
+    version: "0.1.5"
   fake_async:
     dependency: transitive
     description:
@@ -323,14 +331,6 @@ packages:
     description: flutter
     source: sdk
     version: "0.0.0"
-  flutter_tts:
-    dependency: "direct main"
-    description:
-      name: flutter_tts
-      sha256: ce5eb209b40e95f2f4a1397116c87ab2fcdff32257d04ed7a764e75894c03775
-      url: "https://pub.flutter-io.cn"
-    source: hosted
-    version: "4.2.5"
   flutter_web_plugins:
     dependency: transitive
     description: flutter

@@ -11,6 +11,7 @@ import '../../widgets/extract_walkthrough.dart';
 import '../../services/ai_service.dart';
 import '../../services/ets_data_service.dart';
 import '../../services/settings_service.dart';
+import '../../services/tts_service.dart';
 import 'onboarding_page.dart';
 import '../../services/extract_service.dart';
 import '../../services/shell_service.dart';
@@ -37,26 +38,93 @@ class _SettingsPageState extends State<SettingsPage> {
   String? _updateUrl; // 有新版时给「去下载」用
   // 分区导航
   final _scroll = ScrollController();
+  final _scrollViewKey = GlobalKey();
   final _kAppearance = GlobalKey();
   final _kAi = GlobalKey();
   final _kData = GlobalKey();
+  final _kExam = GlobalKey();
   final _kAbout = GlobalKey();
+  int _section = 0;
   String? _prov;
   String? _city;
 
+  late final List<(String, GlobalKey)> _sections = [
+    ('外观', _kAppearance),
+    ('AI 配置', _kAi),
+    ('数据目录', _kData),
+    ('考试信息', _kExam),
+    ('关于', _kAbout),
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _scroll.addListener(_syncSection);
+  }
+
   void _jumpTo(GlobalKey key) {
-    final ctx = key.currentContext;
-    if (ctx != null) {
-      Scrollable.ensureVisible(
-        ctx,
-        duration: const Duration(milliseconds: 320),
-        curve: Curves.easeOutCubic,
+    Future<void> align({required bool animate}) async {
+      final box = key.currentContext?.findRenderObject() as RenderBox?;
+      final scrollBox = _scrollViewKey.currentContext?.findRenderObject()
+          as RenderBox?;
+      if (box == null || !box.hasSize || scrollBox == null) return;
+      if (!_scroll.hasClients) return;
+      // ensureVisible 只做"最少滚到看得见"，目标卡片大部分已在视口下方时
+      // 会提前收手（顶部只露一条边）。这里手动把目标顶边对齐视口顶沿。
+      final dy = box.localToGlobal(Offset.zero, ancestor: scrollBox).dy;
+      final target = (_scroll.offset + dy - 8).clamp(
+        0.0,
+        _scroll.position.maxScrollExtent,
       );
+      if ((target - _scroll.offset).abs() < 2) return;
+      if (animate) {
+        await _scroll.animateTo(
+          target,
+          duration: const Duration(milliseconds: 320),
+          curve: Curves.easeOutCubic,
+        );
+      } else {
+        _scroll.jumpTo(target);
+      }
+    }
+
+    // 上方的提取通道卡片在异步探测返回后会展开变高，把目标往下推——
+    // 一次对位不够，动画结束后再校正两次
+    align(animate: true);
+    Future.delayed(const Duration(milliseconds: 400), () => align(animate: true));
+    Future.delayed(const Duration(milliseconds: 900), () => align(animate: true));
+  }
+
+  /// 分区导航随滚动联动：取各分区顶部最接近视口上沿的那个作为当前分区
+  void _syncSection() {
+    // 取"顶部最接近判定线"的那个分区。只认 dy<=80 的话，滚到两区之间
+    // 会没有任何分区命中，高亮就停在上一区不动了。
+    const line = 8.0;
+    var best = _section;
+    var bestGap = double.infinity;
+    for (var i = 0; i < _sections.length; i++) {
+      final ctx = _sections[i].$2.currentContext;
+      if (ctx == null) continue;
+      final box = ctx.findRenderObject() as RenderBox?;
+      if (box == null || !box.hasSize) continue;
+      final gap = (box.localToGlobal(Offset.zero).dy - line).abs();
+      if (gap < bestGap) {
+        bestGap = gap;
+        best = i;
+      }
+    }
+    if (best != _section) setState(() => _section = best);
+    // 列表到底时高亮最后一个分区（否则最后一段永远选不中）
+    if (_scroll.position.pixels >= _scroll.position.maxScrollExtent - 24) {
+      if (_section != _sections.length - 1) {
+        setState(() => _section = _sections.length - 1);
+      }
     }
   }
 
   @override
   void dispose() {
+    _scroll.removeListener(_syncSection);
     _scroll.dispose();
     super.dispose();
   }
@@ -67,6 +135,7 @@ class _SettingsPageState extends State<SettingsPage> {
     final cs = Theme.of(context).colorScheme;
 
     return GlassScaffold(
+      wall: false,
       body: Column(
         children: [
           // ---- 分区导航栏 ----
@@ -87,10 +156,11 @@ class _SettingsPageState extends State<SettingsPage> {
                     scrollDirection: Axis.horizontal,
                     child: Row(
                       children: [
-                        _navChip(context, '外观', _kAppearance),
-                        _navChip(context, 'AI 配置', _kAi),
-                        _navChip(context, '数据目录', _kData),
-                        _navChip(context, '关于', _kAbout),
+                        _navChip(context, '外观', 0),
+                        _navChip(context, 'AI 配置', 1),
+                        _navChip(context, '数据目录', 2),
+                        _navChip(context, '考试信息', 3),
+                        _navChip(context, '关于', 4),
                       ],
                     ),
                   ),
@@ -103,6 +173,7 @@ class _SettingsPageState extends State<SettingsPage> {
             // 必须"已挂载"才能取到 context，懒加载时未滚到的卡片 key 为 null，
             // 点导航 chip（尤其最底下的「关于」）会没有任何反应
             child: SingleChildScrollView(
+              key: _scrollViewKey,
               controller: _scroll,
               // 底部留出系统导航栏安全区，滚到最后一项不被盖住
               padding: EdgeInsets.fromLTRB(
@@ -114,589 +185,625 @@ class _SettingsPageState extends State<SettingsPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                // ---- 使用帮助（置顶，避免新手找不到） ----
-                AppCard(
-                  radius: 18,
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _cardTitle(context, '使用帮助', Icons.help_outline_rounded),
-                      const SizedBox(height: 8),
-                      Text(
-                        '按功能查看图文引导：作业列表、AI 对话、修改、'
-                        '作业详情页都有对应说明。',
-                        style: Theme.of(context).textTheme.bodySmall
-                            ?.copyWith(color: cs.outline),
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: SizedBox(
-                              height: 44,
-                              child: FilledButton.icon(
-                                onPressed: () => Navigator.of(context).push(
-                                  MaterialPageRoute(
-                                    builder: (_) =>
-                                        const OnboardingPage(embedded: true),
-                                  ),
-                                ),
-                                icon: const Icon(
-                                  Icons.school_rounded,
-                                  size: 18,
-                                ),
-                                label: const Text('新手教程'),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: SizedBox(
-                              height: 44,
-                              child: OutlinedButton.icon(
-                                onPressed: () => TourHub.showHelpSheet(context),
-                                icon: const Icon(Icons.map_outlined, size: 18),
-                                label: const Text('功能引导'),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 14),
-
-                // ---- 外观 ----
-                AppCard(
-                  key: _kAppearance,
-                  radius: 18,
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _cardTitle(context, '外观', Icons.palette_outlined),
-                      const SizedBox(height: 10),
-                      SegmentedButton<ThemeMode>(
-                        segments: const [
-                          ButtonSegment(
-                            value: ThemeMode.system,
-                            label: Text('跟随系统'),
-                          ),
-                          ButtonSegment(
-                            value: ThemeMode.light,
-                            label: Text('浅色'),
-                          ),
-                          ButtonSegment(
-                            value: ThemeMode.dark,
-                            label: Text('深色'),
-                          ),
-                        ],
-                        selected: {s.themeMode},
-                        onSelectionChanged: (sel) => s.setThemeMode(sel.first),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        '软件风格',
-                        style: Theme.of(context).textTheme.labelMedium
-                            ?.copyWith(color: cs.outline),
-                      ),
-                      const SizedBox(height: 6),
-                      SegmentedButton<AppStyle>(
-                        segments: const [
-                          ButtonSegment(
-                            value: AppStyle.material,
-                            label: Text('默认风格'),
-                          ),
-                          ButtonSegment(
-                            value: AppStyle.glass,
-                            label: Text('液态玻璃'),
-                          ),
-                        ],
-                        selected: {s.styleMode},
-                        onSelectionChanged: (sel) => s.setStyleMode(sel.first),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        '布局（平板左侧菜单 / 手机底部菜单）',
-                        style: Theme.of(context).textTheme.labelMedium
-                            ?.copyWith(color: cs.outline),
-                      ),
-                      const SizedBox(height: 6),
-                      SegmentedButton<UiLayoutMode>(
-                        segments: const [
-                          ButtonSegment(
-                            value: UiLayoutMode.auto,
-                            label: Text('自动'),
-                          ),
-                          ButtonSegment(
-                            value: UiLayoutMode.tablet,
-                            label: Text('平板/电脑'),
-                          ),
-                          ButtonSegment(
-                            value: UiLayoutMode.mobile,
-                            label: Text('手机'),
-                          ),
-                        ],
-                        selected: {s.layoutMode},
-                        onSelectionChanged: (sel) => s.setLayoutMode(sel.first),
-                      ),
-                      const SizedBox(height: 4),
-                      SwitchListTile(
-                        dense: true,
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text(
-                          '跟读高亮',
-                          style: TextStyle(fontSize: 13),
-                        ),
-                        subtitle: const Text(
-                          '播放时逐句染色：读过的句子与当前句高亮',
-                          style: TextStyle(fontSize: 12),
-                        ),
-                        value: s.followHighlight,
-                        onChanged: (v) => s.setFollowHighlight(v),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        '主题颜色',
-                        style: Theme.of(context).textTheme.labelMedium
-                            ?.copyWith(color: cs.outline),
-                      ),
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 10,
-                        runSpacing: 10,
-                        children: [
-                          for (final c in const [
-                            0xFF4F6BFF,
-                            0xFF6750A4,
-                            0xFF00696E,
-                            0xFF2E6B27,
-                            0xFF8A4F00,
-                            0xFFB3261E,
-                            0xFF984061,
-                            0xFFE91E8C, // 粉色
-                          ])
-                            _colorDot(context, c),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      OutlinedButton.icon(
-                        onPressed: () => _openColorPicker(context),
-                        icon: const Icon(Icons.colorize_rounded),
-                        label: const Text('自定义颜色（打开调色板）'),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 14),
-
-                // ---- AI 配置 ----
-                _AiSection(
-                  key: _kAi,
-                  testing: _testing,
-                  testResult: _testResult,
-                  onTest: _test,
-                  onTestStateChanged: () => setState(() {}),
-                ),
-                const SizedBox(height: 14),
-
-                // ---- 数据目录 ----
-                AppCard(
-                  key: _kData,
-                  radius: 18,
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _cardTitle(context, '数据目录', Icons.folder_outlined),
-                      const SizedBox(height: 8),
-                      if (Platform.isAndroid) ...[
+                  // ---- 使用帮助（置顶，避免新手找不到） ----
+                  AppCard(
+                    radius: 18,
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _cardTitle(context, '使用帮助', Icons.help_outline_rounded),
                         const SizedBox(height: 8),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
+                        Text(
+                          '按功能查看图文引导：作业列表、AI 对话、修改、'
+                          '作业详情页都有对应说明。',
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: cs.outline),
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
                           children: [
-                            OutlinedButton.icon(
-                              onPressed: () async {
-                                final messenger = ScaffoldMessenger.of(context);
-                                final ok =
-                                    await SettingsService.requestAndroidStorage();
-                                if (!mounted) return;
-                                messenger.showSnackBar(
-                                  SnackBar(
-                                    content: Text(
-                                      ok ? '权限已授予，请点「刷新」' : '未授予权限',
+                            Expanded(
+                              child: SizedBox(
+                                height: 44,
+                                child: FilledButton.icon(
+                                  onPressed: () => Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) =>
+                                          const OnboardingPage(embedded: true),
                                     ),
                                   ),
-                                );
-                              },
-                              icon: const Icon(Icons.lock_open_rounded),
-                              label: const Text('申请"所有文件访问"权限'),
+                                  icon: const Icon(
+                                    Icons.school_rounded,
+                                    size: 18,
+                                  ),
+                                  label: const Text('新手教程'),
+                                ),
+                              ),
                             ),
-                            OutlinedButton.icon(
-                              onPressed: () =>
-                                  _openDataFolder(context, s.androidRoot),
-                              icon: const Icon(Icons.folder_open_rounded),
-                              label: const Text('打开数据目录'),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: SizedBox(
+                                height: 44,
+                                child: OutlinedButton.icon(
+                                  onPressed: () =>
+                                      TourHub.showHelpSheet(context),
+                                  icon: const Icon(
+                                    Icons.map_outlined,
+                                    size: 18,
+                                  ),
+                                  label: const Text('功能引导'),
+                                ),
+                              ),
                             ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+
+                  // ---- 外观 ----
+                  AppCard(
+                    key: _kAppearance,
+                    radius: 18,
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _cardTitle(context, '外观', Icons.palette_outlined),
+                        const SizedBox(height: 10),
+                        SegmentedButton<ThemeMode>(
+                          segments: const [
+                            ButtonSegment(
+                              value: ThemeMode.system,
+                              label: Text('跟随系统'),
+                            ),
+                            ButtonSegment(
+                              value: ThemeMode.light,
+                              label: Text('浅色'),
+                            ),
+                            ButtonSegment(
+                              value: ThemeMode.dark,
+                              label: Text('深色'),
+                            ),
+                          ],
+                          selected: {s.themeMode},
+                          onSelectionChanged: (sel) =>
+                              s.setThemeMode(sel.first),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          '布局（平板左侧菜单 / 手机底部菜单）',
+                          style: Theme.of(context).textTheme.labelMedium
+                              ?.copyWith(color: cs.outline),
+                        ),
+                        const SizedBox(height: 6),
+                        SegmentedButton<UiLayoutMode>(
+                          segments: const [
+                            ButtonSegment(
+                              value: UiLayoutMode.auto,
+                              label: Text('自动'),
+                            ),
+                            ButtonSegment(
+                              value: UiLayoutMode.tablet,
+                              label: Text('平板/电脑'),
+                            ),
+                            ButtonSegment(
+                              value: UiLayoutMode.mobile,
+                              label: Text('手机'),
+                            ),
+                          ],
+                          selected: {s.layoutMode},
+                          onSelectionChanged: (sel) =>
+                              s.setLayoutMode(sel.first),
+                        ),
+                        const SizedBox(height: 4),
+                        SwitchListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text(
+                            '跟读高亮',
+                            style: TextStyle(fontSize: 13),
+                          ),
+                          subtitle: const Text(
+                            '播放时逐句染色：读过的句子与当前句高亮',
+                            style: TextStyle(fontSize: 12),
+                          ),
+                          value: s.followHighlight,
+                          onChanged: (v) => s.setFollowHighlight(v),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          '朗读音色',
+                          style: Theme.of(context).textTheme.labelMedium
+                              ?.copyWith(color: cs.outline),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '用微软 Edge 神经语音在线合成，不需要本机装英语语音包',
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: cs.outline, height: 1.4),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            for (
+                              var i = 0;
+                              i < TtsService.voices.length;
+                              i++
+                            ) ...[
+                              Expanded(
+                                child: _VoiceOption(
+                                  name: TtsService.voices[i].name,
+                                  hint: TtsService.voices[i].hint,
+                                  selected: s.ttsVoiceIndex == i,
+                                  onTap: () => s.setTtsVoiceIndex(i),
+                                ),
+                              ),
+                              if (i < TtsService.voices.length - 1)
+                                const SizedBox(width: AppSpace.sm),
+                            ],
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          '主题颜色',
+                          style: Theme.of(context).textTheme.labelMedium
+                              ?.copyWith(color: cs.outline),
+                        ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 10,
+                          runSpacing: 10,
+                          children: [
+                            for (final c in const [
+                              0xFF4F6BFF,
+                              0xFF6750A4,
+                              0xFF00696E,
+                              0xFF2E6B27,
+                              0xFF8A4F00,
+                              0xFFB3261E,
+                              0xFF984061,
+                              0xFFE91E8C, // 粉色
+                            ])
+                              _colorDot(context, c),
                           ],
                         ),
                         const SizedBox(height: 10),
-                        const _AndroidExtractCard(),
-                      ],
-                      if (Platform.isWindows) ...[
-                        const SizedBox(height: 8),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: [
-                            FilledButton.tonalIcon(
-                              onPressed: _pickRoot,
-                              icon: const Icon(
-                                Icons.create_new_folder_outlined,
-                              ),
-                              label: const Text('添加其他数据目录'),
-                            ),
-                            OutlinedButton.icon(
-                              onPressed: () => _openDataFolder(
-                                context,
-                                s.activeRoots.firstOrNull ?? '',
-                              ),
-                              icon: const Icon(Icons.folder_open_rounded),
-                              label: const Text('打开数据目录'),
-                            ),
-                            OutlinedButton.icon(
-                              onPressed: () => ExtractService.refresh(),
-                              icon: const Icon(Icons.refresh_rounded),
-                              label: const Text('刷新'),
-                            ),
-                          ],
+                        OutlinedButton.icon(
+                          onPressed: () => _openColorPicker(context),
+                          icon: const Icon(Icons.colorize_rounded),
+                          label: const Text('自定义颜色（打开调色板）'),
                         ),
                       ],
-                      for (final r in s.extraRoots)
-                        ListTile(
-                          dense: true,
-                          contentPadding: EdgeInsets.zero,
-                          leading: const Icon(Icons.folder_special_outlined),
-                          title: Text(r, style: const TextStyle(fontSize: 13)),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+
+                  // ---- AI 配置 ----
+                  _AiSection(
+                    key: _kAi,
+                    testing: _testing,
+                    testResult: _testResult,
+                    onTest: _test,
+                    onTestStateChanged: () => setState(() {}),
+                  ),
+                  const SizedBox(height: 14),
+
+                  // ---- 数据目录 ----
+                  AppCard(
+                    key: _kData,
+                    radius: 18,
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _cardTitle(context, '数据目录', Icons.folder_outlined),
+                        const SizedBox(height: 8),
+                        if (Platform.isAndroid) ...[
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
                             children: [
-                              IconButton(
-                                tooltip: '打开此目录',
-                                icon: const Icon(Icons.folder_open_rounded),
-                                onPressed: () => _openDataFolder(context, r),
+                              OutlinedButton.icon(
+                                onPressed: () async {
+                                  final messenger = ScaffoldMessenger.of(
+                                    context,
+                                  );
+                                  final ok =
+                                      await SettingsService.requestAndroidStorage();
+                                  if (!mounted) return;
+                                  messenger.showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        ok ? '权限已授予，请点「刷新」' : '未授予权限',
+                                      ),
+                                    ),
+                                  );
+                                },
+                                icon: const Icon(Icons.lock_open_rounded),
+                                label: const Text('申请"所有文件访问"权限'),
                               ),
-                              IconButton(
-                                icon: const Icon(Icons.delete_outline_rounded),
-                                onPressed: () => s.removeExtraRoot(r),
+                              OutlinedButton.icon(
+                                onPressed: () =>
+                                    _openDataFolder(context, s.androidRoot),
+                                icon: const Icon(Icons.folder_open_rounded),
+                                label: const Text('打开数据目录'),
                               ),
                             ],
                           ),
-                        ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 14),
-
-                // ---- 考试信息（格式匹配：初中/高中、地区）----
-                AppCard(
-                  radius: 18,
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _cardTitle(context, '考试信息（格式匹配）', Icons.school_outlined),
-                      const SizedBox(height: 10),
-                      Row(
-                        children: [
-                          const SizedBox(
-                            width: 56,
-                            child: Text('年级', style: TextStyle(fontSize: 13)),
-                          ),
-                          Expanded(
-                            child: SheetPickerField(
-                              label: s.grade.isEmpty ? '选择年级' : s.grade,
-                              placeholder: '选择年级',
-                              onTap: () async {
-                                final v = await showSheetPicker<String>(
-                                  context,
-                                  title: '选择年级',
-                                  current: s.grade.isEmpty ? null : s.grade,
-                                  options: [
-                                    for (final g in [
-                                      '初一',
-                                      '初二',
-                                      '初三',
-                                      '高一',
-                                      '高二',
-                                      '高三',
-                                    ])
-                                      (g, g),
-                                  ],
-                                );
-                                if (v != null) s.setExamInfo(grade: v);
-                              },
-                            ),
-                          ),
+                          const SizedBox(height: 10),
+                          const _AndroidExtractCard(),
                         ],
-                      ),
-                      const SizedBox(height: 10),
-                      Row(
-                        children: [
-                          const SizedBox(
-                            width: 56,
-                            child: Text('省份', style: TextStyle(fontSize: 13)),
-                          ),
-                          Expanded(
-                            child: SheetPickerField(
-                              label: _prov ?? '选择省份',
-                              placeholder: '选择省份',
-                              onTap: () async {
-                                final v = await showSheetPicker<String>(
-                                  context,
-                                  title: '选择省份',
-                                  current: _prov,
-                                  searchHint: '搜索省份',
-                                  options: [
-                                    for (final prov in kRegionMap.keys)
-                                      (prov, prov),
-                                  ],
-                                );
-                                if (v == null) return;
-                                setState(() {
-                                  _prov = v;
-                                  _city = null;
-                                });
-                                final city = kRegionMap[v]!.first;
-                                s.setExamInfo(region: v + city);
-                              },
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: SheetPickerField(
-                              label: _city ?? (_prov == null ? '先选省份' : '选择城市'),
-                              placeholder: '选择城市',
-                              enabled: _prov != null,
-                              onTap: _prov == null
-                                  ? null
-                                  : () async {
-                                      final v = await showSheetPicker<String>(
-                                        context,
-                                        title: '选择城市',
-                                        current: _city,
-                                        searchHint: '搜索城市',
-                                        options: [
-                                          // '' 哨兵 = 未选择（与取消区分开）
-                                          ('', '未选择'),
-                                          for (final c in kRegionMap[_prov]!)
-                                            (c, c),
-                                        ],
-                                      );
-                                      if (v == null) return;
-                                      setState(
-                                        () => _city = v.isEmpty ? null : v,
-                                      );
-                                      s.setExamInfo(region: _prov! + v);
-                                    },
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      const SizedBox(height: 6),
-                      Text(
-                        '年级决定初中/高中格式匹配；批量生成标题也会参考年级与地区。',
-                        style: Theme.of(context).textTheme.bodySmall
-                            ?.copyWith(color: cs.outline),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 14),
-
-                // ---- 关于 ----
-                AppCard(
-                  key: _kAbout,
-                  radius: 18,
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _cardTitle(context, '关于', Icons.info_outline_rounded),
-                      const SizedBox(height: 10),
-                      Row(
-                        children: [
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(28),
-                            child: Image.asset(
-                              'assets/TX.png',
-                              width: 56,
-                              height: 56,
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, _, _) => CircleAvatar(
-                                radius: 28,
-                                child: Text(
-                                  'K',
-                                  style: Theme.of(context).textTheme.titleLarge,
+                        if (Platform.isWindows) ...[
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              FilledButton.tonalIcon(
+                                onPressed: _pickRoot,
+                                icon: const Icon(
+                                  Icons.create_new_folder_outlined,
                                 ),
+                                label: const Text('添加其他数据目录'),
                               ),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  '苦力怕.KULIPA',
-                                  style: Theme.of(context).textTheme.titleMedium
-                                      ?.copyWith(fontWeight: FontWeight.w600),
+                              OutlinedButton.icon(
+                                onPressed: () => _openDataFolder(
+                                  context,
+                                  s.activeRoots.firstOrNull ?? '',
                                 ),
-                                Text(
-                                  'E听说助手 作者',
-                                  style: Theme.of(context).textTheme.bodySmall
-                                      ?.copyWith(color: cs.outline),
+                                icon: const Icon(Icons.folder_open_rounded),
+                                label: const Text('打开数据目录'),
+                              ),
+                              OutlinedButton.icon(
+                                onPressed: () => ExtractService.refresh(),
+                                icon: const Icon(Icons.refresh_rounded),
+                                label: const Text('刷新'),
+                              ),
+                            ],
+                          ),
+                        ],
+                        for (final r in s.extraRoots)
+                          ListTile(
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                            leading: const Icon(Icons.folder_special_outlined),
+                            title: Text(
+                              r,
+                              style: const TextStyle(fontSize: 13),
+                            ),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  tooltip: '打开此目录',
+                                  icon: const Icon(Icons.folder_open_rounded),
+                                  onPressed: () => _openDataFolder(context, r),
+                                ),
+                                IconButton(
+                                  icon: const Icon(
+                                    Icons.delete_outline_rounded,
+                                  ),
+                                  onPressed: () => s.removeExtraRoot(r),
                                 ),
                               ],
                             ),
                           ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      Row(
-                        children: [
-                          Text(
-                            'E听说助手',
-                            style: Theme.of(context).textTheme.titleSmall,
-                          ),
-                          const SizedBox(width: 8),
-                          // 版本徽章（对外版本号固定 0.8，见 kAppVersion）
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 3,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Theme.of(context).colorScheme.primary
-                                  .withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(999),
-                              border: Border.all(
-                                color: Theme.of(context).colorScheme.primary
-                                    .withValues(alpha: 0.3),
-                              ),
-                            ),
-                            child: Text(
-                              'V$kAppVersion',
-                              style: Theme.of(context).textTheme.labelSmall
-                                  ?.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .primary,
-                                  ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        '本地解析 E听说 客户端已下载的作业数据（content_*/template_*），'
-                        '不联网上传任何数据；AI 调用仅在配置后由用户主动触发。'
-                        '仅供学习研究使用。',
-                        style: Theme.of(context).textTheme.bodySmall
-                            ?.copyWith(color: cs.outline, height: 1.5),
-                      ),
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton.icon(
-                          onPressed: () => launchUrl(
-                            Uri.parse(kGithubRepoUrl),
-                            mode: LaunchMode.externalApplication,
-                          ),
-                          icon: const Icon(Icons.code_rounded, size: 18),
-                          label: const Text('GitHub 开源仓库 · ETS-TOOLS'),
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        kGithubRepoLabel,
-                        style: Theme.of(
-                          context,
-                        ).textTheme.bodySmall?.copyWith(color: cs.primary),
-                      ),
-                      const SizedBox(height: 12),
-                      // ---- 检查更新 ----
-                      Row(
-                        children: [
-                          SizedBox(
-                            height: 40,
-                            child: FilledButton.tonalIcon(
-                              onPressed: _checkingUpdate ? null : _checkUpdate,
-                              icon: _checkingUpdate
-                                  ? const SizedBox(
-                                      width: 16,
-                                      height: 16,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                      ),
-                                    )
-                                  : const Icon(
-                                      Icons.system_update_alt_rounded,
-                                      size: 18,
-                                    ),
-                              label: const Text('检查更新'),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              _updateText,
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: _updateText.startsWith('✗')
-                                    ? cs.error
-                                    : _updateText.startsWith('✓')
-                                    ? Colors.green
-                                    : cs.outline,
-                              ),
-                            ),
-                          ),
-                          if (_updateUrl != null)
-                            TextButton(
-                              onPressed: () => launchUrl(
-                                Uri.parse(_updateUrl!),
-                                mode: LaunchMode.externalApplication,
-                              ),
-                              child: const Text(
-                                '去下载',
-                                style: TextStyle(fontSize: 12),
-                              ),
-                            ),
-                        ],
-                      ),
-                      SwitchListTile(
-                        dense: true,
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text(
-                          '启动时自动检测更新',
-                          style: TextStyle(fontSize: 13),
-                        ),
-                        subtitle: const Text(
-                          '每次打开软件向官网查一次版本号，有新版本会提示「去下载」',
-                          style: TextStyle(fontSize: 12),
-                        ),
-                        value: s.autoCheckUpdate,
-                        onChanged: (v) => s.setAutoCheckUpdate(v),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-                const SizedBox(height: 110),
+                  const SizedBox(height: 14),
+
+                  // ---- 考试信息（格式匹配：初中/高中、地区）----
+                  AppCard(
+                    key: _kExam,
+                    radius: 18,
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _cardTitle(
+                          context,
+                          '考试信息（格式匹配）',
+                          Icons.school_outlined,
+                        ),
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            const SizedBox(
+                              width: 56,
+                              child: Text('年级', style: TextStyle(fontSize: 13)),
+                            ),
+                            Expanded(
+                              child: SheetPickerField(
+                                label: s.grade.isEmpty ? '选择年级' : s.grade,
+                                placeholder: '选择年级',
+                                onTap: () async {
+                                  final v = await showSheetPicker<String>(
+                                    context,
+                                    title: '选择年级',
+                                    current: s.grade.isEmpty ? null : s.grade,
+                                    options: [
+                                      for (final g in [
+                                        '初一',
+                                        '初二',
+                                        '初三',
+                                        '高一',
+                                        '高二',
+                                        '高三',
+                                      ])
+                                        (g, g),
+                                    ],
+                                  );
+                                  if (v != null) s.setExamInfo(grade: v);
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            const SizedBox(
+                              width: 56,
+                              child: Text('省份', style: TextStyle(fontSize: 13)),
+                            ),
+                            Expanded(
+                              child: SheetPickerField(
+                                label: _prov ?? '选择省份',
+                                placeholder: '选择省份',
+                                onTap: () async {
+                                  final v = await showSheetPicker<String>(
+                                    context,
+                                    title: '选择省份',
+                                    current: _prov,
+                                    searchHint: '搜索省份',
+                                    options: [
+                                      for (final prov in kRegionMap.keys)
+                                        (prov, prov),
+                                    ],
+                                  );
+                                  if (v == null) return;
+                                  setState(() {
+                                    _prov = v;
+                                    _city = null;
+                                  });
+                                  final city = kRegionMap[v]!.first;
+                                  s.setExamInfo(region: v + city);
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: SheetPickerField(
+                                label:
+                                    _city ?? (_prov == null ? '先选省份' : '选择城市'),
+                                placeholder: '选择城市',
+                                enabled: _prov != null,
+                                onTap: _prov == null
+                                    ? null
+                                    : () async {
+                                        final v = await showSheetPicker<String>(
+                                          context,
+                                          title: '选择城市',
+                                          current: _city,
+                                          searchHint: '搜索城市',
+                                          options: [
+                                            // '' 哨兵 = 未选择（与取消区分开）
+                                            ('', '未选择'),
+                                            for (final c in kRegionMap[_prov]!)
+                                              (c, c),
+                                          ],
+                                        );
+                                        if (v == null) return;
+                                        setState(
+                                          () => _city = v.isEmpty ? null : v,
+                                        );
+                                        s.setExamInfo(region: _prov! + v);
+                                      },
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        const SizedBox(height: 6),
+                        Text(
+                          '年级决定初中/高中格式匹配；批量生成标题也会参考年级与地区。',
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: cs.outline),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+
+                  // ---- 关于 ----
+                  AppCard(
+                    key: _kAbout,
+                    radius: 18,
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _cardTitle(context, '关于', Icons.info_outline_rounded),
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(28),
+                              child: Image.asset(
+                                'assets/TX.png',
+                                width: 56,
+                                height: 56,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, _, _) => CircleAvatar(
+                                  radius: 28,
+                                  child: Text(
+                                    'K',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleLarge,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '苦力怕.KULIPA',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleMedium
+                                        ?.copyWith(fontWeight: FontWeight.w600),
+                                  ),
+                                  Text(
+                                    'E听说助手 作者',
+                                    style: Theme.of(context).textTheme.bodySmall
+                                        ?.copyWith(color: cs.outline),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            Text(
+                              'E听说助手',
+                              style: Theme.of(context).textTheme.titleSmall,
+                            ),
+                            const SizedBox(width: 8),
+                            // 版本徽章（对外版本号固定 0.8，见 kAppVersion）
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 3,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Theme.of(context).colorScheme.primary
+                                    .withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(999),
+                                border: Border.all(
+                                  color: Theme.of(context).colorScheme.primary
+                                      .withValues(alpha: 0.3),
+                                ),
+                              ),
+                              child: Text(
+                                'V$kAppVersion',
+                                style: Theme.of(context).textTheme.labelSmall
+                                    ?.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .primary,
+                                    ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          '本地解析 E听说 客户端已下载的作业数据（content_*/template_*），'
+                          '不联网上传任何数据；AI 调用仅在配置后由用户主动触发。'
+                          '仅供学习研究使用。',
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: cs.outline, height: 1.5),
+                        ),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            onPressed: () => launchUrl(
+                              Uri.parse(kGithubRepoUrl),
+                              mode: LaunchMode.externalApplication,
+                            ),
+                            icon: const Icon(Icons.code_rounded, size: 18),
+                            label: const Text('GitHub 开源仓库 · ETS-TOOLS'),
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          kGithubRepoLabel,
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: cs.primary),
+                        ),
+                        const SizedBox(height: 12),
+                        // ---- 检查更新 ----
+                        Row(
+                          children: [
+                            SizedBox(
+                              height: 40,
+                              child: FilledButton.tonalIcon(
+                                onPressed: _checkingUpdate
+                                    ? null
+                                    : _checkUpdate,
+                                icon: _checkingUpdate
+                                    ? const SizedBox(
+                                        width: 16,
+                                        height: 16,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                    : const Icon(
+                                        Icons.system_update_alt_rounded,
+                                        size: 18,
+                                      ),
+                                label: const Text('检查更新'),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                _updateText,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: _updateText.startsWith('✗')
+                                      ? cs.error
+                                      : _updateText.startsWith('✓')
+                                      ? Colors.green
+                                      : cs.outline,
+                                ),
+                              ),
+                            ),
+                            if (_updateUrl != null)
+                              TextButton(
+                                onPressed: () => launchUrl(
+                                  Uri.parse(_updateUrl!),
+                                  mode: LaunchMode.externalApplication,
+                                ),
+                                child: const Text(
+                                  '去下载',
+                                  style: TextStyle(fontSize: 12),
+                                ),
+                              ),
+                          ],
+                        ),
+                        SwitchListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text(
+                            '启动时自动检测更新',
+                            style: TextStyle(fontSize: 13),
+                          ),
+                          subtitle: const Text(
+                            '每次打开软件向官网查一次版本号，有新版本会提示「去下载」',
+                            style: TextStyle(fontSize: 12),
+                          ),
+                          value: s.autoCheckUpdate,
+                          onChanged: (v) => s.setAutoCheckUpdate(v),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 110),
                 ],
               ),
             ),
@@ -706,19 +813,57 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  Widget _navChip(BuildContext context, String label, GlobalKey key) {
-    final cs = Theme.of(context).colorScheme;
+  Widget _navChip(BuildContext context, String label, int i) {
+    final active = _section == i;
+    final accent = StyleTokens.accentOf(context);
+    final fg = active
+        ? Colors.white
+        : StyleTokens.textOf(Theme.of(context).brightness);
     return Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: ActionChip(
-        label: Text(label, style: const TextStyle(fontSize: 12)),
-        avatar: Icon(
-          Icons.bookmark_border_rounded,
-          size: 14,
-          color: cs.primary,
+      padding: const EdgeInsets.only(right: AppSpace.sm),
+      child: PressableScale(
+        onTap: () {
+          setState(() => _section = i);
+          _jumpTo(_sections[i].$2);
+        },
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOut,
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpace.md,
+            vertical: AppSpace.sm,
+          ),
+          decoration: BoxDecoration(
+            // 当前分区用实色主题色高亮，否则四个 chip 同权重、用户不知道自己在哪一段
+            color: active ? accent : Colors.transparent,
+            borderRadius: AppRadius.capsule,
+            border: Border.all(
+              color: active
+                  ? Colors.transparent
+                  : StyleTokens.borderOf(Theme.of(context).brightness)
+                        .withValues(alpha: 0.9),
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                active ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
+                size: 14,
+                color: fg,
+              ),
+              const SizedBox(width: AppSpace.xs),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: AppText.xs,
+                  fontWeight: active ? AppText.wBold : AppText.wMedium,
+                  color: fg,
+                ),
+              ),
+            ],
+          ),
         ),
-        visualDensity: VisualDensity.compact,
-        onPressed: () => _jumpTo(key),
       ),
     );
   }
@@ -766,7 +911,7 @@ class _SettingsPageState extends State<SettingsPage> {
     );
     if (dir != null) {
       SettingsService.I.addExtraRoot(dir);
-      EtsDataService.I.rescan();
+      EtsDataService.I.rescan(silent: true);
     }
   }
 
@@ -948,6 +1093,7 @@ class _AiSectionState extends State<_AiSection> {
                         name: v,
                         baseUrl: pr.baseUrl,
                         apiKey: pr.apiKey,
+                        apiFormat: pr.apiFormat,
                       ),
                     ),
                   ),
@@ -962,6 +1108,7 @@ class _AiSectionState extends State<_AiSection> {
                         name: pr.name,
                         baseUrl: v,
                         apiKey: pr.apiKey,
+                        apiFormat: pr.apiFormat,
                       ),
                     ),
                   ),
@@ -977,9 +1124,13 @@ class _AiSectionState extends State<_AiSection> {
                         name: pr.name,
                         baseUrl: pr.baseUrl,
                         apiKey: v,
+                        apiFormat: pr.apiFormat,
                       ),
                     ),
                   ),
+                  const SizedBox(height: 6),
+                  // 接口协议格式：自绘下拉（与其它选择器同一套弹出面板）
+                  _aiFormatField(context, s, pr),
                 ],
               ),
             ),
@@ -1168,9 +1319,10 @@ class _AiSectionState extends State<_AiSection> {
                         tooltip: '思考级别',
                         onSelected: (v) => s.setThinkingOption(ms[i], v),
                         itemBuilder: (_) => [
-                          for (final lv in s
-                              .thinkingMenuLevels(ms[i])
-                              .where((e) => e != 'off'))
+                          for (final lv
+                              in s
+                                  .thinkingMenuLevels(ms[i])
+                                  .where((e) => e != 'off'))
                             PopupMenuItem(
                               value: lv,
                               child: Text(
@@ -1224,12 +1376,42 @@ class _AiSectionState extends State<_AiSection> {
     );
   }
 
+  /// 接口协议格式选择（自绘下拉：点开弹出与其它选择器同一套底部面板）
+  Widget _aiFormatField(BuildContext context, SettingsService s, AiProvider pr) {
+    return SheetPickerField(
+      label: kApiFormatLabels[pr.apiFormat] ?? 'OpenAI Chat（旧版）',
+      placeholder: '接口格式',
+      onTap: () async {
+        final v = await showSheetPicker<String>(
+          context,
+          title: '接口格式',
+          current: pr.apiFormat,
+          addInset: true,
+          options: [
+            for (final f in kApiFormats) (f, kApiFormatLabels[f] ?? f),
+          ],
+        );
+        if (v == null || v == pr.apiFormat) return;
+        s.updateProvider(
+          AiProvider(
+            id: pr.id,
+            name: pr.name,
+            baseUrl: pr.baseUrl,
+            apiKey: pr.apiKey,
+            apiFormat: v,
+          ),
+        );
+      },
+    );
+  }
+
   Future<void> _addProvider(BuildContext context) async {
     final s = context.read<SettingsService>();
     final name = TextEditingController();
     final url = TextEditingController();
     final key = TextEditingController();
     String? preset; // 预设选择
+    String apiFormat = 'openai'; // 接口协议格式（默认 OpenAI 旧版）
 
     await showDialog(
       context: context,
@@ -1274,6 +1456,25 @@ class _AiSectionState extends State<_AiSection> {
                   },
                 ),
                 const SizedBox(height: 10),
+                // 接口协议格式：默认 OpenAI 旧版，四种可切
+                SheetPickerField(
+                  label: kApiFormatLabels[apiFormat] ?? 'OpenAI Chat（旧版）',
+                  placeholder: '接口格式',
+                  onTap: () async {
+                    final v = await showSheetPicker<String>(
+                      context,
+                      title: '接口格式',
+                      current: apiFormat,
+                      addInset: true,
+                      options: [
+                        for (final f in kApiFormats) (f, kApiFormatLabels[f] ?? f),
+                      ],
+                    );
+                    if (v == null) return;
+                    setDialog(() => apiFormat = v);
+                  },
+                ),
+                const SizedBox(height: 10),
                 TextField(
                   controller: name,
                   decoration: const InputDecoration(
@@ -1285,7 +1486,7 @@ class _AiSectionState extends State<_AiSection> {
                 TextField(
                   controller: url,
                   decoration: const InputDecoration(
-                    labelText: '接口地址（OpenAI 兼容）',
+                    labelText: '接口地址 Base URL',
                     hintText: 'https://api.agnes-ai.cn/v1',
                   ),
                 ),
@@ -1350,6 +1551,7 @@ class _AiSectionState extends State<_AiSection> {
                       name: name.text.trim(),
                       baseUrl: baseUrl,
                       apiKey: key.text.trim(),
+                      apiFormat: apiFormat,
                     ),
                   );
                   widget.onTestStateChanged();
@@ -1891,7 +2093,7 @@ class _AndroidExtractCardState extends State<_AndroidExtractCard> {
               TextButton(
                 onPressed: () {
                   SettingsService.I.resetAndroidRoot();
-                  EtsDataService.I.rescan();
+                  EtsDataService.I.rescan(silent: true);
                 },
                 child: const Text('恢复默认路径'),
               ),
@@ -1904,16 +2106,14 @@ class _AndroidExtractCardState extends State<_AndroidExtractCard> {
                 ?.copyWith(color: cs.outline, height: 1.4),
           ),
           const SizedBox(height: 4),
-          Wrap(
-            spacing: 12,
-            runSpacing: 4,
+          // 之前把 SwitchListTile 硬塞进 width:170/190，Material Switch 最小宽59
+          // 再加文字必然挤成两行。这里改成「文字在上、开关在下」的自绘行，
+          // 用 Expanded 平分宽度，窄屏也不会挤。
+          Row(
             children: [
-              SizedBox(
-                width: 170,
-                child: SwitchListTile(
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('启用 Root', style: TextStyle(fontSize: 13)),
+              Expanded(
+                child: _ToggleRow(
+                  label: '启用 Root',
                   value: s.useRoot,
                   onChanged: (v) {
                     s.setChannel(root: v);
@@ -1921,15 +2121,10 @@ class _AndroidExtractCardState extends State<_AndroidExtractCard> {
                   },
                 ),
               ),
-              SizedBox(
-                width: 190,
-                child: SwitchListTile(
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text(
-                    '启用 Shizuku',
-                    style: TextStyle(fontSize: 13),
-                  ),
+              const SizedBox(width: AppSpace.md),
+              Expanded(
+                child: _ToggleRow(
+                  label: '启用 Shizuku',
                   value: s.useShizuku,
                   onChanged: (v) {
                     s.setChannel(shizuku: v);
@@ -1943,39 +2138,26 @@ class _AndroidExtractCardState extends State<_AndroidExtractCard> {
           // 四通道模式选择面板（与作业页空态同一个组件）
           ExtractWalkthrough(
             onExtract: (msg) async {
-              await EtsDataService.I.rescan();
+              await EtsDataService.I.rescan(silent: true);
               if (!context.mounted) return;
               ScaffoldMessenger.of(context)
                   .showSnackBar(SnackBar(content: Text(msg)));
             },
           ),
           const SizedBox(height: 4),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              ActionChip(
-                avatar: const Icon(Icons.download_rounded, size: 14),
-                label: const Text('下载 Shizuku APK', style: TextStyle(fontSize: 12)),
-                onPressed: () => launchUrl(
-                  Uri.parse(kShizukuApkUrl),
-                  mode: LaunchMode.externalApplication,
-                ),
-              ),
-              ActionChip(
-                avatar: const Icon(Icons.bolt_rounded, size: 14),
-                label: const Text('解析下载', style: TextStyle(fontSize: 12)),
-                onPressed: () => launchUrl(
-                  Uri.parse(kShizukuMirrorUrl),
-                  mode: LaunchMode.externalApplication,
-                ),
-              ),
-              // 网盘兜底：解析前缀哪天挂了还能下（蓝奏云提取码 ets，点击自动复制）
-              ActionChip(
-                avatar: const Icon(Icons.cloud_outlined, size: 14),
-                label: const Text('蓝奏云（ets）', style: TextStyle(fontSize: 12)),
-                onPressed: () async {
+          // Shizuku 安装包的四个下载源是**同一个东西**的四种取法，
+          // 收在一个整体区域里（带标题 + 共享边框），而不是四块散着的按钮。
+          _SourceBlock(
+            title: 'Shizuku 安装包',
+            subtitle: '任选一个来源下载',
+            sources: [
+              // 网盘排在上面：解析前缀哪天挂了还能下
+              // （蓝奏云提取码 ets，点击自动复制；蓝奏云是首选、底色更深）
+              (
+                '蓝奏云',
+                Icons.cloud_rounded,
+                true,
+                () async {
                   final messenger = ScaffoldMessenger.of(context);
                   await Clipboard.setData(
                     const ClipboardData(text: kShizukuNetdiskPw),
@@ -1992,17 +2174,324 @@ class _AndroidExtractCardState extends State<_AndroidExtractCard> {
                   );
                 },
               ),
-              ActionChip(
-                avatar: const Icon(Icons.cloud_outlined, size: 14),
-                label: const Text('银盘', style: TextStyle(fontSize: 12)),
-                onPressed: () => launchUrl(
+              (
+                '银盘',
+                Icons.cloud_outlined,
+                false,
+                () => launchUrl(
                   Uri.parse(kShizukuPan2Url),
+                  mode: LaunchMode.externalApplication,
+                ),
+              ),
+              (
+                '解析下载',
+                Icons.bolt_rounded,
+                false,
+                () => launchUrl(
+                  Uri.parse(kShizukuMirrorUrl),
+                  mode: LaunchMode.externalApplication,
+                ),
+              ),
+              (
+                '原版下载',
+                Icons.download_rounded,
+                false,
+                () => launchUrl(
+                  Uri.parse(kShizukuApkUrl),
                   mode: LaunchMode.externalApplication,
                 ),
               ),
             ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// 「文字在上 / 开关在下」的自绘开关行：窄宽度下也不会把标题挤成两行
+class _ToggleRow extends StatelessWidget {
+  final String label;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  const _ToggleRow({
+    required this.label,
+    required this.value,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return PressableScale(
+      onTap: () => onChanged(!value),
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpace.md,
+          vertical: AppSpace.sm,
+        ),
+        decoration: BoxDecoration(
+          borderRadius: AppRadius.cardR,
+          border: Border.all(
+            color: StyleTokens.borderOf(Theme.of(context).brightness)
+                .withValues(alpha: 0.9),
+          ),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: AppText.sm,
+                  fontWeight: AppText.wMedium,
+                  color: StyleTokens.textOf(Theme.of(context).brightness),
+                ),
+              ),
+            ),
+            const SizedBox(width: AppSpace.sm),
+            Switch(value: value, onChanged: onChanged),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 一个「同类下载源」的整体区域：带标题的一整块，内部两列排布各来源。
+/// 四个来源属于同一个对象（Shizuku 安装包），用共享边框圈在一起，
+/// 读作一个区域而不是四个独立按钮。
+class _SourceBlock extends StatelessWidget {
+  final String title;
+  final String? subtitle;
+  final List<(String, IconData, bool, VoidCallback)> sources;
+
+  const _SourceBlock({
+    required this.title,
+    this.subtitle,
+    required this.sources,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final b = Theme.of(context).brightness;
+    return Container(
+      padding: const EdgeInsets.all(AppSpace.md),
+      decoration: BoxDecoration(
+        borderRadius: AppRadius.cardR,
+        border: Border.all(
+          color: StyleTokens.borderOf(b).withValues(alpha: 0.9),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.inventory_2_outlined,
+                size: 16,
+                color: StyleTokens.accentOf(context),
+              ),
+              const SizedBox(width: AppSpace.sm),
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: AppText.md,
+                  fontWeight: AppText.wBold,
+                  color: StyleTokens.textOf(b),
+                ),
+              ),
+              if (subtitle != null) ...[
+                const SizedBox(width: AppSpace.sm),
+                Flexible(
+                  child: Text(
+                    subtitle!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: AppText.xs,
+                      color: StyleTokens.textMutedOf(b),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: AppSpace.md),
+          LayoutBuilder(
+            builder: (context, box) {
+              final w = (box.maxWidth - AppSpace.sm) / 2;
+              return Wrap(
+                spacing: AppSpace.sm,
+                runSpacing: AppSpace.sm,
+                children: [
+                  for (final (label, icon, featured, onTap) in sources)
+                    SizedBox(
+                      width: w,
+                      child: _SourceRow(
+                        label: label,
+                        icon: icon,
+                        featured: featured,
+                        onTap: onTap,
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 区域内的单个来源：整行可点，标签恒为单行
+class _SourceRow extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final bool featured; // 首选来源：底色更深 + 带角标
+  final VoidCallback onTap;
+
+  const _SourceRow({
+    required this.label,
+    required this.icon,
+    required this.featured,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final b = Theme.of(context).brightness;
+    final fg = StyleTokens.textOf(b);
+    return PressableScale(
+      onTap: onTap,
+      child: Container(
+        height: 44,
+        padding: const EdgeInsets.symmetric(horizontal: AppSpace.md),
+        decoration: BoxDecoration(
+          // 首选来源底色更深，一眼看出优先级
+          color: StyleTokens.accentOf(context)
+              .withValues(alpha: featured ? 0.16 : 0.06),
+          borderRadius: AppRadius.capsule,
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 16, color: StyleTokens.accentOf(context)),
+            const SizedBox(width: AppSpace.sm),
+            Expanded(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: AppText.sm,
+                  fontWeight: AppText.wMedium,
+                  color: fg,
+                ),
+              ),
+            ),
+            if (featured)
+              Padding(
+                padding: const EdgeInsets.only(right: AppSpace.xs),
+                child: Text(
+                  '推荐',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: AppText.wBold,
+                    color: StyleTokens.accentOf(context),
+                  ),
+                ),
+              ),
+            Icon(
+              Icons.chevron_right_rounded,
+              size: 16,
+              color: StyleTokens.textMutedOf(b),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 音色选项卡：整块可点，选中=实色主题色 + 白字，和导航胶囊同一套语言
+class _VoiceOption extends StatelessWidget {
+  final String name;
+  final String hint;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _VoiceOption({
+    required this.name,
+    required this.hint,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final b = Theme.of(context).brightness;
+    // 前景用 onPrimary：深色主题下 primary 是亮色，写死白色会糊成一片
+    final fg = selected
+        ? Theme.of(context).colorScheme.onPrimary
+        : StyleTokens.textOf(b);
+    return PressableScale(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpace.md,
+          vertical: AppSpace.md,
+        ),
+        decoration: BoxDecoration(
+          color: selected
+              ? StyleTokens.accentOf(context)
+              : StyleTokens.textOf(b).withValues(alpha: 0.06),
+          borderRadius: AppRadius.cardR,
+          border: Border.all(
+            color: selected
+                ? Colors.transparent
+                : StyleTokens.borderOf(b).withValues(alpha: 0.9),
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  selected
+                      ? Icons.graphic_eq_rounded
+                      : Icons.record_voice_over_rounded,
+                  size: 18,
+                  color: fg,
+                ),
+                const SizedBox(width: AppSpace.sm),
+                Text(
+                  name,
+                  style: TextStyle(
+                    fontSize: AppText.md,
+                    fontWeight: AppText.wBold,
+                    color: fg,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 2),
+            Text(
+              hint,
+              style: TextStyle(
+                fontSize: AppText.xs,
+                color: selected
+                    ? Colors.white.withValues(alpha: 0.85)
+                    : StyleTokens.textMutedOf(b),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

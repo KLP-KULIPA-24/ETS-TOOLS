@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
+import '../../app/shell_chrome.dart';
 import '../../services/ai_chat_service.dart';
 import '../../services/ai_service.dart';
 import '../../services/ambient.dart';
@@ -54,6 +55,7 @@ class _AiChatPageState extends State<AiChatPage> {
   final List<ChatMsg> _msgs = [];
   final List<String> _pendingImages = [];
   bool _sending = false;
+  bool _inputFocused = false; // 输入区聚焦：驱动卡片描边（此前完全没有 focus 反馈）
   String _streamText = '';
   String _status = ''; // 重试/切换/排队提示（独立状态行，不混入正文）
   AiCancelToken? _cancel;
@@ -111,6 +113,7 @@ class _AiChatPageState extends State<AiChatPage> {
   @override
   void dispose() {
     TourHub.unregister(1);
+    ShellChrome.exitSubView();
     // 离开页面时掐断在途请求，避免幽灵流继续写历史
     _cancel?.cancel();
     _mdFlush?.cancel();
@@ -177,6 +180,7 @@ class _AiChatPageState extends State<AiChatPage> {
         ..addAll(msgs);
       _inChat = true;
     });
+    _syncImmersive();
     _jumpBottom();
   }
 
@@ -188,6 +192,18 @@ class _AiChatPageState extends State<AiChatPage> {
       _pendingImages.clear();
       _inChat = true;
     });
+    _syncImmersive();
+  }
+
+  /// 聊天子界面要占满整个内容区（盖掉壳层那条「E听说助手 / AI 对话」顶栏），
+  /// 否则两条顶栏叠着，子界面被挤到壳层顶栏下方，看着像"在下面追加了一层"。
+  /// 只有全局页有这层两级视图；作业内嵌的单会话页是路由推出来的，不受影响。
+  void _syncImmersive() {
+    if (_multi && _inChat) {
+      ShellChrome.enterSubView();
+    } else {
+      ShellChrome.exitSubView();
+    }
   }
 
   void _backToList() {
@@ -196,6 +212,7 @@ class _AiChatPageState extends State<AiChatPage> {
     _queueUntil = null;
     _refreshConvos();
     setState(() => _inChat = false);
+    _syncImmersive();
   }
 
   /// 转发：整段对话导出为纯文本并复制到剪贴板
@@ -215,6 +232,14 @@ class _AiChatPageState extends State<AiChatPage> {
   }
 
   /// 批量删除选中的会话
+  void _selectAll() => setState(() {
+    if (_sel.length == _convos.length) {
+      _sel.clear();
+    } else {
+      _sel.addAll(_convos.map((c) => c.id));
+    }
+  });
+
   Future<void> _deleteSelected() async {
     if (_sel.isEmpty) return;
     final ok = await showDialog<bool>(
@@ -889,7 +914,9 @@ class _AiChatPageState extends State<AiChatPage> {
       onSelected: (v) async {
         if (model == null) return;
         if (v == '__custom__') {
-          final ctrl = TextEditingController(text: model.thinking ? model.thinkingLevel : '');
+          final ctrl = TextEditingController(
+            text: model.thinking ? model.thinkingLevel : '',
+          );
           final value = await showDialog<String>(
             context: context,
             builder: (context) => AlertDialog(
@@ -1043,107 +1070,104 @@ class _AiChatPageState extends State<AiChatPage> {
     // 全局页两级视图：默认会话列表
     if (_multi && !_inChat) {
       return GlassScaffold(
-        appBar: GlassAppBar(
-          title: 'AI 对话',
-          subtitle: _manage ? '已选 ${_sel.length} 项' : subtitle,
-          actions: [
-            if (_manage) ...[
-              // 窄屏放不下三个操作按钮，收进「更多」菜单
-              if (MediaQuery.sizeOf(context).width < 420)
-                PopupMenuButton<String>(
-                  tooltip: '批量操作',
-                  icon: const Icon(Icons.more_vert_rounded, size: 20),
-                  onSelected: (v) {
-                    switch (v) {
-                      case 'all':
-                        setState(() {
-                          if (_sel.length == _convos.length) {
-                            _sel.clear();
-                          } else {
-                            _sel.addAll(_convos.map((c) => c.id));
-                          }
-                        });
-                      case 'del':
-                        _deleteSelected();
-                      case 'done':
-                        setState(() {
-                          _manage = false;
-                          _sel.clear();
-                        });
-                    }
-                  },
-                  itemBuilder: (context) => [
-                    PopupMenuItem(
-                      value: 'all',
+        wall: false,
+        // 壳层已经有一条顶栏（标题「E听说助手」+ 页名「AI 对话」）。
+        // 这里再挂一条会叠成双层顶栏，中间还露出一道缝。
+        // 平时不挂；只在批量管理态补出来——那时的全选/删除/退出才有落脚处。
+        appBar: _manage
+            ? GlassTopBar(
+                title: '批量管理',
+                subtitle: '已选 ${_sel.length} 项',
+                actions: [
+                  // 窄屏放不下三个操作按钮，收进「更多」菜单
+                  if (MediaQuery.sizeOf(context).width < 420)
+                    PopupMenuButton<String>(
+                      tooltip: '批量操作',
+                      icon: const Icon(Icons.more_vert_rounded, size: 20),
+                      onSelected: (v) {
+                        switch (v) {
+                          case 'all':
+                            _selectAll();
+                          case 'del':
+                            _deleteSelected();
+                          case 'done':
+                            setState(() {
+                              _manage = false;
+                              _sel.clear();
+                            });
+                        }
+                      },
+                      itemBuilder: (context) => [
+                        const PopupMenuItem(value: 'all', child: Text('全选')),
+                        PopupMenuItem(
+                          value: 'del',
+                          enabled: _sel.isNotEmpty,
+                          child: Text('删除(${_sel.length})'),
+                        ),
+                        const PopupMenuItem(value: 'done', child: Text('完成')),
+                      ],
+                    )
+                  else ...[
+                    TextButton(
+                      onPressed: _selectAll,
                       child: Text(
                         _sel.length == _convos.length && _convos.isNotEmpty
                             ? '全不选'
                             : '全选',
+                        style: const TextStyle(fontSize: 12),
                       ),
                     ),
-                    PopupMenuItem(
-                      value: 'del',
-                      enabled: _sel.isNotEmpty,
-                      child: Text('删除(${_sel.length})'),
+                    TextButton(
+                      onPressed: _sel.isEmpty ? null : _deleteSelected,
+                      child: Text(
+                        '删除(${_sel.length})',
+                        style: const TextStyle(fontSize: 12),
+                      ),
                     ),
-                    const PopupMenuItem(value: 'done', child: Text('完成')),
-                  ],
-                )
-              else ...[
-                TextButton(
-                  onPressed: () {
-                    setState(() {
-                      if (_sel.length == _convos.length) {
+                    TextButton(
+                      onPressed: () => setState(() {
+                        _manage = false;
                         _sel.clear();
-                      } else {
-                        _sel.addAll(_convos.map((c) => c.id));
-                      }
-                    });
-                  },
-                  child: Text(
-                    _sel.length == _convos.length && _convos.isNotEmpty
-                        ? '全不选'
-                        : '全选',
-                    style: const TextStyle(fontSize: 12),
-                  ),
-                ),
-                TextButton(
-                  onPressed: _sel.isEmpty ? null : _deleteSelected,
-                  child: Text(
-                    '删除(${_sel.length})',
-                    style: const TextStyle(fontSize: 12),
-                  ),
-                ),
-                TextButton(
-                  onPressed: () => setState(() {
-                    _manage = false;
-                    _sel.clear();
-                  }),
-                  child: const Text('完成', style: TextStyle(fontSize: 12)),
-                ),
-              ],
-            ] else
-              IconButton(
-                tooltip: '管理会话',
-                icon: const Icon(Icons.checklist_rounded, size: 20),
-                onPressed: () => setState(() => _manage = true),
-              ),
-          ],
-        ),
+                      }),
+                      child: const Text('完成', style: TextStyle(fontSize: 12)),
+                    ),
+                  ],
+                ],
+              )
+            : null,
         body: Column(
           children: [
             if (!_manage)
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                child: SizedBox(
-                  key: _kNewConvo,
-                  width: double.infinity,
-                  height: 44,
-                  child: FilledButton.icon(
-                    onPressed: _newConvo,
-                    icon: const Icon(Icons.add_comment_outlined, size: 18),
-                    label: const Text('新对话'),
-                  ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: SizedBox(
+                        key: _kNewConvo,
+                        height: 44,
+                        child: FilledButton.icon(
+                          onPressed: _newConvo,
+                          icon: const Icon(
+                            Icons.add_comment_outlined,
+                            size: 18,
+                          ),
+                          label: const Text('新对话'),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: AppSpace.sm),
+                    // 批量管理入口：这一层没有顶栏（平时不挂），按钮放正文行右侧
+                    SizedBox(
+                      width: 44,
+                      height: 44,
+                      child: IconButton.outlined(
+                        tooltip: '管理会话',
+                        icon: const Icon(Icons.checklist_rounded, size: 20),
+                        onPressed: () => setState(() => _manage = true),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             Expanded(
@@ -1157,12 +1181,47 @@ class _AiChatPageState extends State<AiChatPage> {
                     )
                   : _convos.isEmpty
                   ? Center(
-                      child: Text(
-                        '暂无会话记录，点上方「新对话」开始',
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.outline,
-                          fontSize: 13,
-                        ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 64,
+                            height: 64,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: StyleTokens.accentOf(context)
+                                  .withValues(alpha: 0.10),
+                              border: Border.all(
+                                color: StyleTokens.accentOf(context)
+                                    .withValues(alpha: 0.22),
+                              ),
+                            ),
+                            child: Icon(
+                              Icons.forum_outlined,
+                              size: 28,
+                              color: StyleTokens.accentOf(context),
+                            ),
+                          ),
+                          const SizedBox(height: AppSpace.md),
+                          Text(
+                            '还没有会话',
+                            style: TextStyle(
+                              fontSize: AppText.lg,
+                              fontWeight: AppText.wBold,
+                              color: StyleTokens.textOf(
+                                Theme.of(context).brightness,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: AppSpace.xs),
+                          Text(
+                            '点上方「新对话」，和 AI 聊聊这次作业',
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.outline,
+                              fontSize: AppText.sm,
+                            ),
+                          ),
+                        ],
                       ),
                     )
                   : ListView.builder(
@@ -1245,7 +1304,8 @@ class _AiChatPageState extends State<AiChatPage> {
 
     // 聊天子界面（全局）或作业内单会话
     return GlassScaffold(
-      appBar: GlassAppBar(
+      wall: false,
+      appBar: GlassTopBar(
         title: _multi ? (_convoTitle.isEmpty ? '新对话' : _convoTitle) : 'AI 实时对话',
         subtitle: subtitle,
         leading: _multi
@@ -1336,108 +1396,130 @@ class _AiChatPageState extends State<AiChatPage> {
               // 手机端底部悬浮胶囊（高 60 + 贴底 10）会盖住输入栏，按钮点不到
               bottomInset,
             ),
-            child: AppCard(
-              key: _kInput,
-              radius: 20,
-              padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
-              child: Column(
-                children: [
-                  if (_pendingImages.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(
-                        left: 6,
-                        top: 4,
-                        bottom: 4,
-                      ),
-                      child: Wrap(
-                        spacing: 6,
-                        children: [
-                          for (final img in _pendingImages)
-                            Chip(
-                              visualDensity: VisualDensity.compact,
-                              avatar: const Icon(Icons.image_rounded, size: 16),
-                              label: Text(
-                                img.split('/').last.split('\\').last,
-                                style: const TextStyle(fontSize: 12),
-                              ),
-                              onDeleted: () =>
-                                  setState(() => _pendingImages.remove(img)),
-                            ),
-                        ],
-                      ),
-                    ),
-                  Builder(
-                    builder: (rowContext) {
-                      // 窄屏：输入框独占一行，按钮/选择器排下方一行，避免挤成豆腐块
-                      final narrow = MediaQuery.of(rowContext).size.width < 560;
-                      final field = Focus(
-                        // 回车直接发送；Shift+Enter 才换行
-                        onKeyEvent: (node, event) {
-                          if (event is KeyDownEvent &&
-                              event.logicalKey == LogicalKeyboardKey.enter &&
-                              !HardwareKeyboard.instance.isShiftPressed) {
-                            _send();
-                            return KeyEventResult.handled;
-                          }
-                          return KeyEventResult.ignored;
-                        },
-                        child: TextField(
-                          controller: _ctrl,
-                          minLines: 1,
-                          maxLines: narrow ? 3 : 4,
-                          decoration: InputDecoration(
-                            hintText: narrow
-                                ? '问点什么…'
-                                : '问点什么…（Enter 发送 / Shift+Enter 换行）',
-                            border: InputBorder.none,
-                          ),
-                          onSubmitted: (_) => _send(),
+            // TextField 内部是 InputBorder.none（多行输入不该有内框），
+            // 所以聚焦反馈由卡片描边承担——此前完全没有，聚焦时毫无变化
+            child: Focus(
+              onFocusChange: (has) {
+                if (has != _inputFocused) setState(() => _inputFocused = has);
+              },
+              child: AppCard(
+                key: _kInput,
+                radius: AppRadius.card,
+                border: Border.all(
+                  width: _inputFocused ? 1.5 : 1,
+                  color: _inputFocused
+                      ? StyleTokens.accentOf(context)
+                      : Colors.transparent,
+                ),
+                padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
+                child: Column(
+                  children: [
+                    if (_pendingImages.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(
+                          left: 6,
+                          top: 4,
+                          bottom: 4,
                         ),
-                      );
-                      final pic = IconButton(
-                        tooltip: '添加图片（多模态）',
-                        onPressed: _pickImage,
-                        icon: const Icon(Icons.add_photo_alternate_outlined),
-                      );
-                      final send = IconButton.filled(
-                        tooltip: _sending ? '停止生成' : '发送',
-                        onPressed: _sending ? () => _cancel?.cancel() : _send,
-                        icon: _sending
-                            ? const Icon(Icons.stop_rounded)
-                            : const Icon(Icons.send_rounded),
-                      );
-                      if (narrow) {
-                        return Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                        child: Wrap(
+                          spacing: 6,
                           children: [
-                            Padding(
-                              padding: const EdgeInsets.only(left: 6, right: 6),
-                              child: field,
+                            for (final img in _pendingImages)
+                              Chip(
+                                visualDensity: VisualDensity.compact,
+                                avatar: const Icon(
+                                  Icons.image_rounded,
+                                  size: 16,
+                                ),
+                                label: Text(
+                                  img.split('/').last.split('\\').last,
+                                  style: const TextStyle(fontSize: 12),
+                                ),
+                                onDeleted: () =>
+                                    setState(() => _pendingImages.remove(img)),
+                              ),
+                          ],
+                        ),
+                      ),
+                    Builder(
+                      builder: (rowContext) {
+                        // 窄屏：输入框独占一行，按钮/选择器排下方一行，避免挤成豆腐块
+                        final narrow =
+                            MediaQuery.of(rowContext).size.width < 560;
+                        final field = Focus(
+                          // 回车直接发送；Shift+Enter 才换行
+                          onKeyEvent: (node, event) {
+                            if (event is KeyDownEvent &&
+                                event.logicalKey == LogicalKeyboardKey.enter &&
+                                !HardwareKeyboard.instance.isShiftPressed) {
+                              _send();
+                              return KeyEventResult.handled;
+                            }
+                            return KeyEventResult.ignored;
+                          },
+                          child: TextField(
+                            controller: _ctrl,
+                            minLines: 1,
+                            maxLines: narrow ? 3 : 4,
+                            decoration: InputDecoration(
+                              hintText: narrow
+                                  ? '问点什么…'
+                                  : '问点什么…（Enter 发送 / Shift+Enter 换行）',
+                              border: InputBorder.none,
                             ),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.end,
-                              children: [
-                                pic,
-                                _thinkingSelector(s, model),
-                                _modelSelector(s),
-                                send,
-                              ],
-                            ),
+                            onSubmitted: (_) => _send(),
+                          ),
+                        );
+                        final pic = IconButton(
+                          tooltip: '添加图片（多模态）',
+                          onPressed: _pickImage,
+                          icon: const Icon(Icons.add_photo_alternate_outlined),
+                        );
+                        final send = IconButton.filled(
+                          tooltip: _sending ? '停止生成' : '发送',
+                          onPressed: _sending ? () => _cancel?.cancel() : _send,
+                          icon: _sending
+                              ? const Icon(Icons.stop_rounded)
+                              : const Icon(Icons.send_rounded),
+                        );
+                        if (narrow) {
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.only(
+                                  left: 6,
+                                  right: 6,
+                                ),
+                                child: field,
+                              ),
+                              // 图片/思考档/模型三个入口靠左排开，发送键顶到最右。
+                              // 之前整行 end 对齐，四个控件全挤在右下角。
+                              Row(
+                                children: [
+                                  pic,
+                                  _thinkingSelector(s, model),
+                                  _modelSelector(s),
+                                  const Spacer(),
+                                  send,
+                                ],
+                              ),
+                            ],
+                          );
+                        }
+                        return Row(
+                          children: [
+                            pic,
+                            Expanded(child: field),
+                            _thinkingSelector(s, model),
+                            _modelSelector(s),
+                            send,
                           ],
                         );
-                      }
-                      return Row(
-                        children: [
-                          pic,
-                          Expanded(child: field),
-                          _thinkingSelector(s, model),
-                          _modelSelector(s),
-                          send,
-                        ],
-                      );
-                    },
-                  ),
-                ],
+                      },
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -1456,6 +1538,7 @@ class _AiChatPageState extends State<AiChatPage> {
     int? statsIndex,
   }) {
     final cs = Theme.of(context).colorScheme;
+    final b = Theme.of(context).brightness;
     final isUser = role == 'user';
     return Align(
       alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
@@ -1466,15 +1549,25 @@ class _AiChatPageState extends State<AiChatPage> {
           maxWidth: MediaQuery.of(context).size.width * 0.78,
         ),
         decoration: BoxDecoration(
+          // 用户气泡用实色主题色（主题色的主要落点之一）；AI 气泡用明确的
+          // 卡片底色而不是 M3 派生的默认灰——长会话里那一大片灰云就是这么来的
           color: isUser
-              ? cs.primary.withValues(alpha: 0.92)
-              : cs.surfaceContainerHighest.withValues(alpha: 0.7),
+              ? StyleTokens.accentOf(context)
+              : StyleTokens.surfaceOf(b),
+          // 尾角：气泡朝对齐的那一侧收成 4px，是 iOS 气泡的标志性细节
           borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(16),
-            topRight: const Radius.circular(16),
-            bottomLeft: Radius.circular(isUser ? 16 : 4),
-            bottomRight: Radius.circular(isUser ? 4 : 16),
+            topLeft: const Radius.circular(AppRadius.card),
+            topRight: const Radius.circular(AppRadius.card),
+            bottomLeft: Radius.circular(isUser ? AppRadius.card : 4),
+            bottomRight: Radius.circular(isUser ? 4 : AppRadius.card),
           ),
+          border: isUser
+              ? null
+              : Border.all(
+                  color: StyleTokens.borderOf(b).withValues(alpha: 0.9),
+                ),
+          // 不投影：阴影会漫到气泡顶边糊出一条灰带，和卡片同一毛病
+          boxShadow: const [],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1811,71 +1904,6 @@ class _ThinkingPanelState extends State<_ThinkingPanel> {
             ),
           ),
       ],
-    );
-  }
-}
-
-class GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
-  final String title;
-  final String? subtitle;
-  final List<Widget>? actions;
-  final Widget? leading;
-
-  const GlassAppBar({
-    super.key,
-    required this.title,
-    this.subtitle,
-    this.actions,
-    this.leading,
-  });
-
-  @override
-  Size get preferredSize =>
-      Size.fromHeight(subtitle == null ? kToolbarHeight : kToolbarHeight + 14);
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final dark = Theme.of(context).brightness == Brightness.dark;
-    return Container(
-      // 顶栏玻璃：浅色 0.66 磨砂 + 底缘发丝线（纯透明等于没有玻璃）
-      decoration: BoxDecoration(
-        color: dark
-            ? const Color(0xFF141A26).withValues(alpha: 0.62)
-            : Colors.white.withValues(alpha: 0.66),
-        border: Border(
-          bottom: BorderSide(
-            color: dark
-                ? Colors.white.withValues(alpha: 0.10)
-                : Colors.white.withValues(alpha: 0.9),
-          ),
-        ),
-      ),
-      child: AppBar(
-        backgroundColor: Colors.transparent,
-        leading: leading,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 18),
-            ),
-            if (subtitle != null)
-              Text(
-                subtitle!,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 12, color: cs.outline),
-              ),
-          ],
-        ),
-        actions: actions,
-        titleSpacing: 8,
-        ),
     );
   }
 }

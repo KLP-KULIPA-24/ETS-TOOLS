@@ -1,3 +1,4 @@
+import 'dart:typed_data' show Float64List;
 import 'dart:ui' show ImageFilter;
 
 import 'dart:math' show Random, sin;
@@ -8,8 +9,27 @@ import 'package:provider/provider.dart';
 import '../services/ambient.dart';
 import '../services/settings_service.dart';
 
-/// iOS 26 玻璃风格容器：
-/// 玻璃模式 = 高斯模糊 + 半透明材质 + 细描边；默认模式 = 常规卡片材质
+/// 饱和度滤镜（等价于 CSS 的 `saturate(180%)`）。
+///
+/// 这是网页版每个玻璃件都带的一步，也是 App 端长期缺的一步：
+/// Flutter 的 BackdropFilter 没有 colorFilter，历史上只能用一点主题色 tint
+/// 近似，结果玻璃底下的颜色一律发灰——"看上去一点也不透"。
+/// 用色彩矩阵把饱和度真正提上来，玻璃才会像网页版那样"透且艳"。
+///
+/// 参数是 4x4、按列主序排的 **16** 项色彩矩阵：0-3 描述 R'，4-7 描述 G'，
+/// 8-11 描述 B'，12-15 描述 A'。传 20 项会抛
+/// "matrix4 must have 16 entries"（这个 API 没有平移列，平移另走 translate）。
+ImageFilter saturate(double s) => ImageFilter.matrix(
+  Float64List.fromList(<double>[
+    0.213 + 0.787 * s, 0.715 - 0.715 * s, 0.072 - 0.072 * s, 0, //
+    0.213 - 0.213 * s, 0.715 + 0.285 * s, 0.072 - 0.072 * s, 0, //
+    0.213 - 0.213 * s, 0.715 - 0.715 * s, 0.072 + 0.928 * s, 0, //
+    0, 0, 0, 1, //
+  ]),
+);
+
+/// iOS 26 玻璃风格容器：三层折射模糊 + 半透明材质 + 细描边
+/// （style-pack：玻璃只给控制层——顶栏/导航/悬浮控件，内容层用 AppCard）
 class GlassContainer extends StatelessWidget {
   final Widget child;
   final double radius;
@@ -31,40 +51,12 @@ class GlassContainer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = context.watch<SettingsService>();
-    final cs = Theme.of(context).colorScheme;
     final dark = Theme.of(context).brightness == Brightness.dark;
     final accent = Color(s.accentValue);
 
-    if (s.styleMode != AppStyle.glass) {
-      return Container(
-        margin: margin,
-        padding: padding,
-        decoration: BoxDecoration(
-          color: color ?? cs.surfaceContainerLowest,
-          borderRadius: BorderRadius.circular(radius),
-          border:
-              border ??
-              Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
-        ),
-        child: child,
-      );
-    }
-
     return Padding(
       padding: margin ?? EdgeInsets.zero,
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(radius),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: dark ? 0.35 : 0.07),
-              blurRadius: dark ? 18 : 26,
-              offset: Offset(0, dark ? 8 : 10),
-              spreadRadius: dark ? 0 : -6,
-            ),
-          ],
-        ),
-        child: ClipRRect(
+      child: ClipRRect(
           borderRadius: BorderRadius.circular(radius),
           // ===== iOS 26 液态玻璃：三层折射 =====
           // 每层 = 模糊 + 微小平移（compose）：不同方向/幅度采样背景 →
@@ -73,35 +65,17 @@ class GlassContainer extends StatelessWidget {
             children: [
               Positioned.fill(
                 child: BackdropFilter(
+                  // 一层就够：模糊 + 饱和 + 微小平移合成一个 filter。
+                  // 此前叠三层 blur(8/18/34) 是"氛围一开就卡"的同类问题——
+                  // 每一层都要重新采样整块背景，层数直接乘进耗时。
                   filter: ImageFilter.compose(
-                    outer: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-                    inner: ImageFilter.matrix(
-                      (Matrix4.identity()..translateByDouble(-1.6, -1.0, 0, 1))
-                          .storage,
-                    ),
-                  ),
-                  child: const SizedBox.expand(),
-                ),
-              ),
-              Positioned.fill(
-                child: BackdropFilter(
-                  filter: ImageFilter.compose(
-                    outer: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-                    inner: ImageFilter.matrix(
-                      (Matrix4.identity()..translateByDouble(1.2, 1.6, 0, 1))
-                          .storage,
-                    ),
-                  ),
-                  child: const SizedBox.expand(),
-                ),
-              ),
-              Positioned.fill(
-                child: BackdropFilter(
-                  filter: ImageFilter.compose(
-                    outer: ImageFilter.blur(sigmaX: 34, sigmaY: 34),
-                    inner: ImageFilter.matrix(
-                      (Matrix4.identity()..translateByDouble(0.6, -0.8, 0, 1))
-                          .storage,
+                    outer: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                    inner: ImageFilter.compose(
+                      outer: saturate(dark ? 1.5 : 1.7),
+                      inner: ImageFilter.matrix(
+                        (Matrix4.identity()..translateByDouble(0.8, -0.6, 0, 1))
+                            .storage,
+                      ),
                     ),
                   ),
                   child: const SizedBox.expand(),
@@ -111,18 +85,19 @@ class GlassContainer extends StatelessWidget {
                 padding: padding,
                 foregroundDecoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(radius),
-                  // 透镜边缘：顶缘高光带（0–30% 最亮，模拟光源折射）+
-                  // 底缘极淡内阴影（玻璃厚度），alpha 全部压低避免冲淡内容
+                  // 透镜边缘：网页版每块玻璃都有 `inset 0 1px 0 rgba(255,255,255,.12)`
+                  // 这道清脆的顶缘内高光——1px 收边 + 一小段过渡，
+                  // 玻璃的"边"才立得住。之前摊成 30% 的白雾，反而把内容冲淡。
                   gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
                     colors: [
-                      Colors.white.withValues(alpha: dark ? 0.14 : 0.30),
+                      Colors.white.withValues(alpha: dark ? 0.26 : 0.52),
+                      Colors.white.withValues(alpha: dark ? 0.04 : 0.06),
                       Colors.white.withValues(alpha: 0.0),
-                      Colors.white.withValues(alpha: dark ? 0.02 : 0.04),
                       Colors.black.withValues(alpha: dark ? 0.10 : 0.025),
                     ],
-                    stops: const [0, 0.30, 0.72, 1],
+                    stops: const [0, 0.06, 0.34, 1],
                   ),
                 ),
                 decoration: BoxDecoration(
@@ -133,9 +108,10 @@ class GlassContainer extends StatelessWidget {
                       Color.alphaBlend(
                         accent.withValues(alpha: dark ? 0.055 : 0.045),
                         dark
-                            // iOS 26 玻璃 = 高度透明：背景色斑要透得过来
-                            ? const Color(0xFF131926).withValues(alpha: 0.20)
-                            : Colors.white.withValues(alpha: 0.24),
+                            // 用户反馈"太透明模糊"：玻璃底色收实一些，
+                            // 透光但能稳稳托住图标文字
+                            ? const Color(0xFF131926).withValues(alpha: 0.48)
+                            : Colors.white.withValues(alpha: 0.55),
                       ),
                   borderRadius: BorderRadius.circular(radius),
                   border:
@@ -151,14 +127,18 @@ class GlassContainer extends StatelessWidget {
               ),
             ],
           ),
-        ),
       ),
     );
   }
 }
 
-/// 页面背景：
-/// 玻璃模式 = 柔和渐变光斑；默认模式 = 主题背景色
+/// 页面背景：柔和渐变 + 克制的色斑
+///
+/// 色斑是"玻璃的可折射内容"：玻璃卡要靠背景有东西可模糊才看得出透镜感。
+/// 但宁可**少而淡**也不要多而艳——四段 stops 让外圈快速归零，避免"贴了一张图"。
+/// 背景彩虹必须是**静态**的（渐入后完全静止）：背景层在玻璃卡
+/// BackdropFilter 的采样路径里，任何每帧变化都会逼全屏玻璃每帧重新模糊。
+/// 动态流光看 AmbientRainbow。
 class GlassWall extends StatelessWidget {
   final Widget child;
   const GlassWall({super.key, required this.child});
@@ -167,21 +147,6 @@ class GlassWall extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = context.watch<SettingsService>();
     final dark = Theme.of(context).brightness == Brightness.dark;
-    if (s.styleMode != AppStyle.glass) {
-      // 默认模式：铺主题背景色，避免透明 Scaffold 透底
-      // 背景彩虹必须是**静态**的（渐入后完全静止）：背景层在玻璃卡
-      // BackdropFilter 的采样路径里，任何每帧变化都会逼全屏玻璃
-      // 每帧重新模糊——"氛围一开就卡爆"的根因。动态流光看 AmbientRainbow。
-      return ColoredBox(
-        color: Theme.of(context).scaffoldBackgroundColor,
-        child: Stack(
-          children: [
-            const Positioned.fill(child: _AmbientTintBackdrop()),
-            Positioned.fill(child: child),
-          ],
-        ),
-      );
-    }
     final accent = Color(s.accentValue);
     return Stack(
       children: [
@@ -193,17 +158,17 @@ class GlassWall extends StatelessWidget {
                 end: Alignment.bottomRight,
                 colors: dark
                     ? [
-                        Color(0xFF0B0F1A),
+                        const Color(0xFF0B0F1A),
                         Color.alphaBlend(
                           accent.withValues(alpha: 0.16),
                           const Color(0xFF0B0F1A),
                         ),
-                        Color(0xFF0B0F1A),
+                        const Color(0xFF0B0F1A),
                       ]
                     : [
                         const Color(0xFFF4F6FB),
                         Color.alphaBlend(
-                          accent.withValues(alpha: 0.18),
+                          accent.withValues(alpha: 0.16),
                           Colors.white,
                         ),
                         const Color(0xFFEDF1F8),
@@ -212,35 +177,37 @@ class GlassWall extends StatelessWidget {
             ),
           ),
         ),
-        // 色斑是"玻璃的可折射内容"：越多越浓，模糊/透镜边缘越明显
-        // 右上那枚压在最上面（顶栏/玻璃条那一带），重了会像贴了一块图 → 淡一档
+        // 三枚：主题色（右上，紧贴顶栏）、青（左下）、紫（右下）。
+        // 粉色那枚已去掉——它不承载任何语义，只增加杂色。
         Positioned(
-          top: -90,
-          right: -70,
-          child: _blob(280, accent.withValues(alpha: dark ? 0.10 : 0.09)),
+          top: -110,
+          right: -90,
+          child: _blob(340, accent.withValues(alpha: dark ? 0.13 : 0.12)),
         ),
         Positioned(
-          bottom: -90,
-          left: -60,
+          bottom: -110,
+          left: -90,
           child: _blob(
-            300,
+            340,
             const Color(0xFF22D3EE).withValues(alpha: dark ? 0.09 : 0.10),
           ),
         ),
         Positioned(
-          top: 190,
-          left: -110,
+          bottom: 100,
+          right: -140,
           child: _blob(
-            280,
-            const Color(0xFFE91E8C).withValues(alpha: dark ? 0.05 : 0.06),
+            300,
+            const Color(0xFF8B5CF6).withValues(alpha: dark ? 0.07 : 0.08),
           ),
         ),
+        // 压在底部悬浮胶囊下方：胶囊要真的糊到颜色才看得出玻璃感，
+        // 否则它背后是一张平色渐变，模糊等于没做。
         Positioned(
-          bottom: 120,
-          right: -120,
+          bottom: -60,
+          left: -30,
           child: _blob(
-            320,
-            const Color(0xFF8B5CF6).withValues(alpha: dark ? 0.06 : 0.07),
+            260,
+            const Color(0xFF22D3EE).withValues(alpha: dark ? 0.10 : 0.12),
           ),
         ),
         const Positioned.fill(child: _AmbientTintBackdrop()),
@@ -263,11 +230,11 @@ class GlassWall extends StatelessWidget {
           gradient: RadialGradient(
             colors: [
               color,
-              color.withValues(alpha: a * 0.52),
-              color.withValues(alpha: a * 0.16),
+              color.withValues(alpha: a * 0.42),
+              color.withValues(alpha: a * 0.10),
               color.withValues(alpha: 0),
             ],
-            stops: const [0, 0.34, 0.7, 1],
+            stops: const [0, 0.42, 0.72, 1],
           ),
         ),
       ),
@@ -439,38 +406,41 @@ class GradientTranslation extends GradientTransform {
 }
 
 /// 通用页面脚手架：背景墙覆盖全屏（含状态栏 + AppBar 区域，杜绝黑边）
+///
+/// [wall] = false 用于**已经在 HomeShell 的背景墙之内**的页面：
+/// 壳层已经铺过一层 GlassWall，页面再铺一层就变成双层渐变 + 6 枚色斑，
+/// 既重影又逼玻璃多采样一遍背景。只有 push 出来的独立路由才需要自带背景墙。
 class GlassScaffold extends StatelessWidget {
   final PreferredSizeWidget? appBar;
   final Widget body;
   final Widget? floatingActionButton;
+  final bool wall;
 
   const GlassScaffold({
     super.key,
     this.appBar,
     required this.body,
     this.floatingActionButton,
+    this.wall = true,
   });
 
   @override
   Widget build(BuildContext context) {
+    final content = Column(
+      children: [
+        // AppBar 画在背景墙之上（手动补状态栏高度）
+        if (appBar != null)
+          Padding(
+            padding: EdgeInsets.only(top: MediaQuery.paddingOf(context).top),
+            child: appBar,
+          ),
+        Expanded(child: body),
+      ],
+    );
     return Scaffold(
       backgroundColor: Colors.transparent,
       floatingActionButton: floatingActionButton,
-      body: GlassWall(
-        child: Column(
-          children: [
-            // AppBar 画在背景墙之上（手动补状态栏高度）
-            if (appBar != null)
-              Padding(
-                padding: EdgeInsets.only(
-                  top: MediaQuery.paddingOf(context).top,
-                ),
-                child: appBar,
-              ),
-            Expanded(child: body),
-          ],
-        ),
-      ),
+      body: wall ? GlassWall(child: content) : content,
     );
   }
 }

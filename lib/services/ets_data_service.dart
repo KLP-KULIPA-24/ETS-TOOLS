@@ -22,12 +22,21 @@ class EtsDataService extends ChangeNotifier {
   /// 各根目录的扫描状态
   final Map<String, String> rootStatus = {};
 
-  Future<void> rescan() async {
+  /// [silent] = 静默刷新：扫描期间**保留旧列表不通知**，扫完整体替换。
+  /// 原实现一上来就 `entries.clear(); notifyListeners();`，作业列表会先整片
+  /// 消失再重新出现——打开作业页的自动刷新正好走这条路径，闪一下很扎眼。
+  Future<void> rescan({bool silent = false}) async {
     if (scanning) return;
     scanning = true;
     lastError = '';
-    entries.clear();
-    notifyListeners();
+    final previous = silent
+        ? List<HomeworkEntry>.of(entries)
+        : <HomeworkEntry>[];
+    if (!silent) {
+      entries.clear();
+      notifyListeners();
+    }
+    final collected = <HomeworkEntry>[];
 
     final aiTitles = await loadAiTitles();
     final roots = SettingsService.I.activeRoots;
@@ -56,7 +65,7 @@ class EtsDataService extends ChangeNotifier {
             );
           }
         }
-        entries.addAll(found);
+        (silent ? collected : entries).addAll(found);
         final folderCount = computeGroups(found).length;
         rootStatus[root] = '已扫描 $folderCount 个文件夹';
       } catch (e) {
@@ -64,10 +73,18 @@ class EtsDataService extends ChangeNotifier {
         lastError = '$e';
       }
     }
-    entries.sort((a, b) => b.mtime.compareTo(a.mtime));
+    final target = silent ? collected : entries;
+    target.sort((a, b) => b.mtime.compareTo(a.mtime));
     // 多根目录可能重叠，按目录路径去重
     final seen = <String>{};
-    entries.retainWhere((e) => seen.add(e.dir));
+    target.retainWhere((e) => seen.add(e.dir));
+    if (silent) {
+      // 整体替换：中间过程列表一直显示旧内容，不会闪。
+      // 一份都没扫到时宁可留着旧数据，也别把列表清空。
+      entries
+        ..clear()
+        ..addAll(target.isEmpty ? previous : target);
+    }
     scanning = false;
     if (entries.isNotEmpty) {
       Achievements.unlock('start');

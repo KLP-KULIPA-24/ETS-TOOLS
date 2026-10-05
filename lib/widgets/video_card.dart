@@ -33,7 +33,16 @@ class VideoCard extends StatefulWidget {
 
 class _VideoCardState extends State<VideoCard> {
   late final Player _player = Player();
-  late final VideoController _controller = VideoController(_player);
+  // 关闭 GPU 渲染：media_kit 文档明写"关闭可提升某些设备稳定性"。
+  // MuMu 这类模拟器的 OpenGL 初始化 `101010-2` 格式失败，走 GPU 路径解码出来的
+  // 画面会整体偏红（logcat: `Failed to initialize 101010-2 format`）。
+  // 代价是 CPU 渲染略慢，但对"考试短视频"这个体量完全可以接受。
+  late final VideoController _controller = VideoController(
+    _player,
+    configuration: const VideoControllerConfiguration(
+      enableHardwareAcceleration: false,
+    ),
+  );
   bool _loaded = false;
   VoidCallback? _audioWatch;
   Duration _dur = Duration.zero; // 媒体时长（元数据就绪后回填）
@@ -105,7 +114,6 @@ class _VideoCardState extends State<VideoCard> {
     if (r != null) await _player.setRate(r);
   }
 
-
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -150,7 +158,10 @@ class _VideoCardState extends State<VideoCard> {
                 fit: StackFit.expand,
                 children: [
                   // 只出画面，控件全部自绘（双端一致）
-                  Video(controller: _controller, controls: NoVideoControls()),
+                  // media_kit_video 2.x 起 NoVideoControls 不再是类，而是
+                  // `const NoVideoControls = null`。照旧写 NoVideoControls()
+                  // 就是对 null 调用 call() → 整张卡崩成红屏。
+                  Video(controller: _controller, controls: NoVideoControls),
                   // 点画面：播放/暂停；同时把控制条收起来
                   GestureDetector(
                     behavior: HitTestBehavior.opaque,
@@ -199,7 +210,9 @@ class _VideoCardState extends State<VideoCard> {
                         onDragUpdate: (v) => setState(() => _dragPos = v),
                         onDragEnd: (v) {
                           setState(() => _dragPos = null);
-                          _player.seek(Duration(milliseconds: (v * 1000).round()));
+                          _player.seek(
+                            Duration(milliseconds: (v * 1000).round()),
+                          );
                         },
                         onToggle: _toggle,
                         onSpeed: _pickSpeed,
@@ -269,7 +282,9 @@ class _VideoBar extends StatelessWidget {
           initialData: Duration.zero,
           builder: (context, posSnap) {
             final pos = dragPos ?? posSnap.data!.inMilliseconds / 1000.0;
-            final total = d.inMilliseconds > 0 ? d.inMilliseconds / 1000.0 : 0.0;
+            final total = d.inMilliseconds > 0
+                ? d.inMilliseconds / 1000.0
+                : 0.0;
             final cur = pos.clamp(0.0, total > 0 ? total : 0.0);
             return Container(
               padding: const EdgeInsets.fromLTRB(6, 4, 6, 4),
@@ -370,6 +385,7 @@ class _VideoBar extends StatelessWidget {
     );
   }
 }
+
 /// 全屏播放页：黑色背景 + 同一播放器的另一控制器 + 自绘控制条
 class _FullscreenVideo extends StatefulWidget {
   final VideoController controller;
@@ -411,7 +427,7 @@ class _FullscreenVideoState extends State<_FullscreenVideo> {
           Positioned.fill(
             child: Video(
               controller: widget.controller,
-              controls: NoVideoControls(),
+              controls: NoVideoControls,
             ),
           ),
           // 顶部：返回 + 标题

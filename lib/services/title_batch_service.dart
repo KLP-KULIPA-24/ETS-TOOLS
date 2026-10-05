@@ -104,7 +104,7 @@ class TitleBatchService {
         }
       }
       await EtsDataService.saveAiTitles(toSave);
-      await EtsDataService.I.rescan();
+      await EtsDataService.I.rescan(silent: true);
       return (total: targets.length, ok: ok, error: '');
     } finally {
       running = false;

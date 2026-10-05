@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../services/extract_service.dart';
 import '../services/settings_service.dart';
+import 'style.dart';
 
 /// 选择工作授权模式：四通道（SHIZUKU / ROOT / DIRECT_READ / SAF）
 /// 参照 ETSToolbox 的模式选择形态：单选卡 + 徽章 + 说明 + 实时状态 + 操作
@@ -54,7 +55,9 @@ class _ExtractWalkthroughState extends State<ExtractWalkthrough> {
       _ready = ready;
       _stateText = stateText;
       // 默认选中上一次用户指定的通道（作业页「刷新」会优先用它），
-      // 没选过或该通道当前未就绪时，退回第一个就绪的通道（按推荐顺序）
+      // 没选过或该通道当前未就绪时，退回第一个就绪的通道（按推荐顺序）；
+      // Shizuku/Root 都没检测到时，默认对准 SAF——哪怕还没授权，
+      // 选中态也落在推荐通道上，引导去点「授权目录」
       if (_selected == null) {
         final pref = SettingsService.I.extractModePref;
         final saved = ExtractMode.values
@@ -64,7 +67,15 @@ class _ExtractWalkthroughState extends State<ExtractWalkthrough> {
             .where((e) => e.value)
             .map((e) => e.key)
             .toList();
-        _selected = saved ?? (hits.isEmpty ? null : hits.first);
+        final hasPrivilege =
+            ready[ExtractMode.shizuku] == true ||
+            ready[ExtractMode.root] == true;
+        _selected = saved ??
+            (hits.isNotEmpty
+                ? hits.first
+                : hasPrivilege
+                ? null
+                : ExtractMode.saf);
       }
     });
   }
@@ -206,11 +217,12 @@ class _ModeCard extends StatelessWidget {
     this.onPrepare,
   });
 
+  // 徽章即推荐优先级：SAF 最傻瓜（系统选择器点两下），排第一
   String get _badge => switch (mode) {
-    ExtractMode.shizuku => 'Recommended',
-    ExtractMode.root => 'Highest Perm',
+    ExtractMode.saf => 'Recommended',
     ExtractMode.directRead => 'No Root',
-    ExtractMode.saf => 'System Picker',
+    ExtractMode.shizuku => 'Higher Perm',
+    ExtractMode.root => 'Highest Perm',
   };
 
   IconData get _icon => switch (mode) {
@@ -268,9 +280,7 @@ class _ModeCard extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
-                    color: mode == ExtractMode.shizuku
-                        ? cs.primary
-                        : cs.outline,
+                    color: mode == ExtractMode.saf ? cs.primary : cs.outline,
                   ),
                 ),
               ],
@@ -286,36 +296,55 @@ class _ModeCard extends StatelessWidget {
             const SizedBox(height: 8),
             Padding(
               padding: const EdgeInsets.only(left: 28),
-              child: Row(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(
-                    ready
-                        ? Icons.check_circle_rounded
-                        : Icons.info_outline_rounded,
-                    size: 15,
-                    color: ready ? Colors.green : cs.outline,
+                  Row(
+                    children: [
+                      Icon(
+                        ready
+                            ? Icons.check_circle_rounded
+                            : Icons.info_outline_rounded,
+                        size: 15,
+                        color: ready ? StyleTokens.success : cs.outline,
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          stateText,
+                          style: TextStyle(fontSize: 12, color: cs.outline),
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      stateText,
-                      style: TextStyle(fontSize: 12, color: cs.outline),
-                    ),
-                  ),
-                  // 授权按钮常驻：授权状态可能失效（选错层级 / 系统回收授权），
-                  // 已就绪时显示「重新授权」允许重选
-                  if (onPrepare != null)
-                    TextButton(
-                      onPressed: busy ? null : onPrepare,
-                      child: Text(
-                        !ready
-                            ? (mode == ExtractMode.shizuku
-                                  ? '授权 Shizuku'
-                                  : '授权目录')
-                            : '重新授权',
-                        style: const TextStyle(fontSize: 12),
+                  // 授权按钮另起一行：此前和状态文字挤在同一 Row 里，
+                  // 窄宽度下按钮文字被折成两行。
+                  // 授权状态可能失效（选错层级 / 系统回收授权），
+                  // 已就绪时显示「重新授权」允许重选。
+                  if (onPrepare != null) ...[
+                    const SizedBox(height: 2),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton(
+                        onPressed: busy ? null : onPrepare,
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: AppSpace.sm,
+                          ),
+                          minimumSize: const Size(0, 36),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        child: Text(
+                          !ready
+                              ? (mode == ExtractMode.shizuku
+                                    ? '授权 Shizuku'
+                                    : '授权目录')
+                              : '重新授权',
+                          style: const TextStyle(fontSize: 12),
+                        ),
                       ),
                     ),
+                  ],
                 ],
               ),
             ),

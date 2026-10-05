@@ -100,7 +100,7 @@ class ShellService {
 
     // 指向副本并重新扫描
     SettingsService.I.setAndroidRoot(dst);
-    await EtsDataService.I.rescan();
+    await EtsDataService.I.rescan(silent: true);
     final n = EtsDataService.I.entries.length;
     return (true, '提取成功（via ${r.via}）→ 发现 $n 项作业');
   }
@@ -114,11 +114,11 @@ class ShellService {
         final r = await extractEtsData();
         if (r.$1) return r;
         // 提取失败也照常扫一遍现有目录，别让用户看到空列表
-        await EtsDataService.I.rescan();
+        await EtsDataService.I.rescan(silent: true);
         return (false, '${r.$2}；已按现有目录刷新');
       }
     }
-    await EtsDataService.I.rescan();
+    await EtsDataService.I.rescan(silent: true);
     return (true, '已刷新，共 ${EtsDataService.I.entries.length} 项作业');
   }
 }

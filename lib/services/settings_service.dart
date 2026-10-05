@@ -9,9 +9,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'region_data.dart';
 
-/// 界面风格
-enum AppStyle { material, glass }
-
 /// 布局模式：自动（平板左栏/手机底栏）/ 平板（模仿电脑）/ 手机
 enum UiLayoutMode { auto, tablet, mobile }
 
@@ -57,11 +54,18 @@ class AiProvider {
   String name;
   String baseUrl;
   String apiKey;
+
+  /// 接口协议格式：openai（Chat Completions 旧版，默认）/
+  /// openai-responses（Responses API）/ anthropic（Messages API）/
+  /// gemini（generateContent）
+  String apiFormat;
+
   AiProvider({
     required this.id,
     required this.name,
     required this.baseUrl,
     required this.apiKey,
+    this.apiFormat = 'openai',
   });
 
   Map<String, dynamic> toJson() => {
@@ -69,6 +73,7 @@ class AiProvider {
     'name': name,
     'baseUrl': baseUrl,
     'apiKey': apiKey,
+    'apiFormat': apiFormat,
   };
 
   static AiProvider fromJson(Map<String, dynamic> j) => AiProvider(
@@ -76,8 +81,19 @@ class AiProvider {
     name: '${j['name'] ?? ''}',
     baseUrl: '${j['baseUrl'] ?? ''}',
     apiKey: '${j['apiKey'] ?? ''}',
+    apiFormat: '${j['apiFormat'] ?? 'openai'}',
   );
 }
+
+/// 接口协议格式全集（顺序即下拉顺序；openai 排第一 = 默认）
+const kApiFormats = ['openai', 'openai-responses', 'anthropic', 'gemini'];
+
+const kApiFormatLabels = {
+  'openai': 'OpenAI Chat（旧版）',
+  'openai-responses': 'OpenAI Responses',
+  'anthropic': 'Anthropic Messages',
+  'gemini': 'Google Gemini',
+};
 
 /// 思考档位全集（不含 off——「关」由思考开关承担）
 const kThinkingLevelOrder = ['on', 'low', 'medium', 'high', 'ultra', 'max'];
@@ -204,12 +220,14 @@ class SettingsService extends ChangeNotifier {
 
   // ---- 外观 ----
   ThemeMode themeMode = ThemeMode.system;
-  int accentValue = 0xFF4F6BFF;
+  int accentValue = 0xFF4F7CFF;
   bool useCustomColor = false;
-  AppStyle styleMode = AppStyle.material;
 
   /// 跟读高亮：播放时逐句染色（读完的句子/当前句变色）
   bool followHighlight = true;
+
+  /// 朗读音色（对应 TtsService.voices 的下标）
+  int ttsVoiceIndex = 0;
   UiLayoutMode layoutMode = UiLayoutMode.auto; // 安卓平板/手机布局
 
   // ---- AI（多提供商 / 多模型）----
@@ -297,14 +315,13 @@ class SettingsService extends ChangeNotifier {
     return false;
   }
 
-
   Future<void> load() async {
     _sp = await SharedPreferences.getInstance();
     themeMode = ThemeMode.values[_sp.getInt('themeMode') ?? 0];
     accentValue = _sp.getInt('accent') ?? accentValue;
     useCustomColor = _sp.getBool('useCustomColor') ?? false;
-    styleMode = AppStyle.values[_sp.getInt('styleMode') ?? 0];
     followHighlight = _sp.getBool('followHighlight') ?? true;
+    ttsVoiceIndex = _sp.getInt('ttsVoiceIndex') ?? 0;
     layoutMode = UiLayoutMode.values[_sp.getInt('layoutMode') ?? 0];
     windowsRoot = _sp.getString('windowsRoot') ?? '';
     androidRoot = _sp.getString('androidRoot') ?? androidRoot;
@@ -509,6 +526,12 @@ class SettingsService extends ChangeNotifier {
     _sp.setBool('followHighlight', v);
   }
 
+  void setTtsVoiceIndex(int i) {
+    ttsVoiceIndex = i;
+    _sp.setInt('ttsVoiceIndex', i);
+    notifyListeners();
+  }
+
   void setAutoCheckUpdate(bool v) {
     autoCheckUpdate = v;
     _sp.setBool('autoCheckUpdate', v);
@@ -518,12 +541,6 @@ class SettingsService extends ChangeNotifier {
   void setExtractModePref(String name) {
     extractModePref = name;
     _sp.setString('extractModePref', name);
-  }
-
-  void setStyleMode(AppStyle s) {
-    styleMode = s;
-    _sp.setInt('styleMode', s.index);
-    notifyListeners();
   }
 
   void setLayoutMode(UiLayoutMode m) {

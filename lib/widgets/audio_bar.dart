@@ -39,7 +39,6 @@ class _AudioBarState extends State<AudioBar> {
   double _pos = 0;
   double _dur = 0;
 
-
   @override
   void initState() {
     super.initState();

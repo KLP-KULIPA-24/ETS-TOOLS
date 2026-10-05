@@ -53,8 +53,12 @@ Future<double?> showSpeedSheet(
               SliderTheme(
                 data: SliderTheme.of(ctx).copyWith(
                   trackHeight: 6,
-                  thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 9),
-                  overlayShape: const RoundSliderOverlayShape(overlayRadius: 18),
+                  thumbShape: const RoundSliderThumbShape(
+                    enabledThumbRadius: 9,
+                  ),
+                  overlayShape: const RoundSliderOverlayShape(
+                    overlayRadius: 18,
+                  ),
                 ),
                 child: Slider(
                   value: value,
@@ -139,5 +143,7 @@ void _applyText(BuildContext ctx, String text, double fallback) {
 
 String _trim(double v) {
   final s = v.toStringAsFixed(2);
-  return s.endsWith('0') && !s.endsWith('.00') ? s.substring(0, s.length - 1) : (s.endsWith('.00') ? s.substring(0, s.length - 3) : s);
+  return s.endsWith('0') && !s.endsWith('.00')
+      ? s.substring(0, s.length - 1)
+      : (s.endsWith('.00') ? s.substring(0, s.length - 3) : s);
 }

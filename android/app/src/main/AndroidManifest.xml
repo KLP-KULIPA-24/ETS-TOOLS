@@ -40,6 +40,12 @@
             android:name="flutterEmbedding"
             android:value="2" />
 
+        <!-- 关掉 Impeller：media_kit 的视频纹理在 Impeller 下会出现整片色偏
+             （画面泛红），改回 Skia/OpenGL 渲染。 -->
+        <meta-data
+            android:name="io.flutter.embedding.android.EnableImpeller"
+            android:value="false" />
+
         <!-- Shizuku 提权 Provider -->
         <provider
             android:name="rikka.shizuku.ShizukuProvider"

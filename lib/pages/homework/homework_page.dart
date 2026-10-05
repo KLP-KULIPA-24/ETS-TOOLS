@@ -10,8 +10,8 @@ import '../../services/settings_service.dart';
 import '../../services/extract_service.dart';
 import '../../services/title_batch_service.dart';
 import '../../widgets/common.dart';
-import '../../widgets/glass.dart';
 import '../../widgets/interactive_tour.dart';
+import '../../widgets/style.dart';
 import '../../widgets/tour_guide.dart';
 import '../../widgets/extract_walkthrough.dart';
 import '../detail/content_detail_page.dart';
@@ -19,6 +19,77 @@ import 'group_page.dart';
 import '../../services/achievements.dart';
 
 enum _SortMode { newest, oldest, titleAsc, titleDesc }
+
+/// 悬浮玻璃按钮：控制层专用（style-pack），实色主题色 + 胶囊 + 轻浮起。
+/// 此前用 `primary@0.14` 纯alpha 染色、无边框无阴影，在浅色底上混出来
+/// 就是一块淡灰蓝——「半透明灰块」的来源。
+class _GlassFabButton extends StatelessWidget {
+  final String? tooltip;
+  final VoidCallback onPressed;
+  final Icon child;
+  final String? label;
+  final bool busy;
+
+  const _GlassFabButton({
+    super.key,
+    this.tooltip,
+    required this.onPressed,
+    required this.child,
+    this.label,
+    this.busy = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final b = Theme.of(context).brightness;
+    final dark = b == Brightness.dark;
+    final fg = StyleTokens.accentOf(context);
+    return PressableScale(
+      onTap: busy ? null : onPressed,
+      child: Tooltip(
+        message: tooltip ?? '',
+        child: Container(
+          height: 44,
+          padding: EdgeInsets.symmetric(horizontal: label == null ? 14 : 16),
+          decoration: BoxDecoration(
+            color: cs.surface,
+            borderRadius: AppRadius.capsule,
+            border: Border.all(
+              color: dark
+                  ? Colors.white.withValues(alpha: 0.14)
+                  : StyleTokens.borderOf(b).withValues(alpha: 0.9),
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (busy)
+                SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: fg),
+                )
+              else
+                Icon(child.icon, size: 18, color: fg),
+              if (label != null) ...[
+                const SizedBox(width: AppSpace.sm),
+                Text(
+                  label!,
+                  style: TextStyle(
+                    fontSize: AppText.sm,
+                    fontWeight: AppText.wBold,
+                    color: fg,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 /// 视图模式：详细展示（原列表卡） / 紧凑网格
 enum _ViewMode { detail, grid }
@@ -93,8 +164,10 @@ class _HomeworkPageState extends State<HomeworkPage> {
     super.initState();
     TourHub.register(0, _buildTour);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final ds = EtsDataService.I;
-      if (ds.entries.isEmpty && !ds.scanning) ds.rescan();
+      // 打开应用自动刷新：走与刷新按钮同一条链路（Root/Shizuku 提取 + 扫描），
+      // 静默执行不弹提示。原先只在数据为空时才 rescan，改完设置/装完作业
+      // 回到首页看到的还是旧数据。
+      _refresh(silent: true);
       // 若设置中请求了互动教程，进入本页自动播放
       final s = SettingsService.I;
       if (s.tourRequested) {
@@ -166,8 +239,7 @@ class _HomeworkPageState extends State<HomeworkPage> {
     }
 
     final showRootAction =
-        Platform.isWindows ||
-        SettingsService.I.activeRoots.any(rootReachable);
+        Platform.isWindows || SettingsService.I.activeRoots.any(rootReachable);
 
     final completed = settings.completedDirs;
     final deleted = settings.deletedDirs;
@@ -180,8 +252,10 @@ class _HomeworkPageState extends State<HomeworkPage> {
     final q = _search.text.trim().toLowerCase();
     final filtered = allEntries.where((e) {
       if (_filter != null && e.structure != _filter) return false;
-      final isDone = completed.contains(e.dir);
-      if (_showDone != isDone) return false;
+      // 「已完成区」是"只看已完成"的开关：开=只看完成，关=全部
+      // （原先写成 _showDone != isDone，关掉时只剩未完成项，
+      //   和首颗 chip 宣称的「全部」自相矛盾，还让两个胶囊同时高亮）
+      if (_showDone && !completed.contains(e.dir)) return false;
       if (q.isNotEmpty &&
           !e.title.toLowerCase().contains(q) &&
           !e.structure.label.contains(q) &&
@@ -231,371 +305,344 @@ class _HomeworkPageState extends State<HomeworkPage> {
             if (_showTopBtn)
               Padding(
                 padding: const EdgeInsets.only(bottom: 10),
-                child: FloatingActionButton.small(
-                  heroTag: 'top',
+                child: _GlassFabButton(
                   tooltip: '回到顶部',
                   onPressed: () => _scroll.animateTo(
                     0,
                     duration: const Duration(milliseconds: 350),
                     curve: Curves.easeOut,
                   ),
-                  child: const Icon(Icons.arrow_upward_rounded),
+                  child: const Icon(Icons.arrow_upward_rounded, size: 18),
                 ),
               ),
-            FloatingActionButton.extended(
+            _GlassFabButton(
               key: _kFab,
-              heroTag: 'rescan',
-              onPressed: (_refreshing || ds.scanning) ? null : _refresh,
-              // 轻透玻璃小胶囊，别做成一大块实色
-              elevation: 0,
-              highlightElevation: 0,
-              backgroundColor: cs.primary.withValues(alpha: 0.14),
-              foregroundColor: cs.primary,
-              shape: const StadiumBorder(),
-              extendedPadding: const EdgeInsets.symmetric(horizontal: 14),
-              icon: (_refreshing || ds.scanning)
-                  ? const SizedBox(
-                      width: 15,
-                      height: 15,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.refresh_rounded, size: 18),
-              label: const Text('刷新', style: TextStyle(fontSize: 13)),
+              busy: _refreshing || ds.scanning,
+              onPressed: () => _refresh(silent: true),
+              label: '刷新',
+              child: const Icon(Icons.refresh_rounded, size: 18),
             ),
           ],
         ),
       ),
-      body: GlassWall(
-        child: RefreshIndicator(
-          onRefresh: () => _refresh(silent: true),
-          child: CustomScrollView(
-            controller: _scroll,
-            slivers: [
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (wide)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 6),
-                          child: Text(
-                            '作业',
-                            style: Theme.of(context).textTheme.headlineSmall,
-                          ),
+      body: RefreshIndicator(
+        onRefresh: () => _refresh(silent: true),
+        child: CustomScrollView(
+          controller: _scroll,
+          slivers: [
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // 手机端顶栏已经写着「作业」，页面里再顶一个大标题就是重复。
+                    // 宽屏（左侧菜单布局）没有顶栏，才需要这一行。
+                    if (wide)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: Text(
+                          '作业',
+                          style: Theme.of(context).textTheme.headlineSmall
+                              ?.copyWith(
+                                fontWeight: AppText.wBold,
+                                letterSpacing: -0.4,
+                              ),
                         ),
-                      SizedBox(
-                        key: _kChips,
-                        height: 44,
-                        child: ListView(
-                          scrollDirection: Axis.horizontal,
-                          // 右侧留白：最后一个筛选胶囊不贴边（也是"还能往右滑"的提示）
-                          padding: const EdgeInsets.only(right: 16),
-                          children: [
-                            _filterChip(
-                              null,
-                              '${_showDone ? '已完成' : '全部'} '
-                              '(${allGroups.length})',
-                              cs,
-                            ),
-                            ...EtsStructure.values
-                                .where(
-                                  (s) => allGroups.any((g) => g.structure == s),
+                      ),
+                    SizedBox(
+                      key: _kChips,
+                      height: 44,
+                      child: ListView(
+                        scrollDirection: Axis.horizontal,
+                        // 右侧留白：最后一个筛选胶囊不贴边（也是"还能往右滑"的提示）
+                        padding: const EdgeInsets.only(right: 16),
+                        children: [
+                          _filterChip(null, '全部 (${allGroups.length})', cs),
+                          ...EtsStructure.values
+                              .where(
+                                (s) => allGroups.any((g) => g.structure == s),
+                              )
+                              .map(
+                                (s) => _filterChip(
+                                  s,
+                                  '${s.label} '
+                                  '(${allGroups.where((g) => g.structure == s).length})',
+                                  cs,
+                                ),
+                              ),
+                          PillTab(
+                            label: '已完成区',
+                            icon: Icons.check_rounded,
+                            selected: _showDone,
+                            filled: true,
+                            onTap: () => setState(() {
+                              _showDone = !_showDone;
+                              _selectMode = false;
+                              _selectedKeys.clear();
+                            }),
+                          ),
+                          const SizedBox(width: AppSpace.sm),
+                          // 一键批量生成缺失标题（单次请求打包全部）
+                          _batchTitle
+                              ? PillTab(
+                                  label: '生成中…',
+                                  filled: true,
+                                  leading: const CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
                                 )
-                                .map(
-                                  (s) => _filterChip(
-                                    s,
-                                    '${s.label} '
-                                    '(${allGroups.where((g) => g.structure == s).length})',
-                                    cs,
+                              : PillTab(
+                                  label: '生成缺失标题',
+                                  icon: Icons.auto_awesome_rounded,
+                                  filled: true,
+                                  onTap: _runBatchTitle,
+                                ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    // 窄屏换行：搜索框独占一行，排序/视图/管理退到第二行
+                    LayoutBuilder(
+                      builder: (context, box) {
+                        final narrow = box.maxWidth < 560;
+                        return Wrap(
+                          key: _kSearch,
+                          spacing: AppSpace.sm,
+                          runSpacing: AppSpace.sm,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            SizedBox(
+                              // 236 是给右侧三个控件留的魔数，改成按比例收
+                              width:
+                                  (narrow ? box.maxWidth : box.maxWidth * 0.55)
+                                      .clamp(180.0, box.maxWidth),
+                              child: TextField(
+                                controller: _search,
+                                decoration: InputDecoration(
+                                  hintText: '搜索标题 / 题号…',
+                                  prefixIcon: const Icon(
+                                    Icons.search_rounded,
+                                    size: 20,
+                                  ),
+                                  // 不覆写 border：主题的胶囊 + 聚焦主题色描边
+                                  // 才是规范值，局部 border 会让聚焦时圆角跳变
+                                ),
+                              ),
+                            ),
+                            PopupMenuButton<_SortMode>(
+                              tooltip: '排序方式',
+                              onSelected: (v) => setState(() => _sort = v),
+                              itemBuilder: (_) => const [
+                                PopupMenuItem(
+                                  value: _SortMode.newest,
+                                  child: Text('时间 · 最新优先'),
+                                ),
+                                PopupMenuItem(
+                                  value: _SortMode.oldest,
+                                  child: Text('时间 · 最早优先'),
+                                ),
+                                PopupMenuItem(
+                                  value: _SortMode.titleAsc,
+                                  child: Text('标题 · A → Z'),
+                                ),
+                                PopupMenuItem(
+                                  value: _SortMode.titleDesc,
+                                  child: Text('标题 · Z → A'),
+                                ),
+                              ],
+                              child: IgnorePointer(
+                                child: PillTab(
+                                  label: switch (_sort) {
+                                    _SortMode.newest => '最新',
+                                    _SortMode.oldest => '最早',
+                                    _SortMode.titleAsc => 'A-Z',
+                                    _SortMode.titleDesc => 'Z-A',
+                                  },
+                                  icon: Icons.sort_rounded,
+                                  filled: true,
+                                ),
+                              ),
+                            ),
+                            PopupMenuButton<int>(
+                              tooltip: '展示方式',
+                              onSelected: (v) => setState(() {
+                                if (v == -1) {
+                                  _autoView = true;
+                                } else {
+                                  _autoView = false;
+                                  _view = v == 1
+                                      ? _ViewMode.grid
+                                      : _ViewMode.detail;
+                                }
+                              }),
+                              itemBuilder: (_) => [
+                                PopupMenuItem(
+                                  value: -1,
+                                  child: Row(
+                                    children: [
+                                      if (_autoView)
+                                        const Icon(Icons.check, size: 16),
+                                      if (!_autoView) const SizedBox(width: 16),
+                                      const Text('自动（详细展示）'),
+                                    ],
                                   ),
                                 ),
-                            FilterChip(
-                              selected: _showDone,
-                              label: const Text('已完成区'),
-                              avatar: const Icon(
-                                Icons.check_rounded,
-                                size: 15,
+                                const PopupMenuItem(
+                                  value: 0,
+                                  child: Text('详细展示'),
+                                ),
+                                const PopupMenuItem(
+                                  value: 1,
+                                  child: Text('紧凑网格（小卡片）'),
+                                ),
+                              ],
+                              child: IgnorePointer(
+                                child: PillTab(
+                                  label: _autoView
+                                      ? '自动'
+                                      : view == _ViewMode.detail
+                                      ? '详细'
+                                      : '紧凑',
+                                  icon: _autoView
+                                      ? Icons.auto_mode_rounded
+                                      : view == _ViewMode.detail
+                                      ? Icons.view_list_rounded
+                                      : Icons.grid_view_rounded,
+                                  filled: true,
+                                ),
                               ),
-                              onSelected: (v) => setState(() {
-                                _showDone = v;
-                                _selectMode = false;
+                            ),
+                            IconButton(
+                              tooltip: '管理作业',
+                              icon: const Icon(
+                                Icons.checklist_rounded,
+                                size: 20,
+                              ),
+                              onPressed: () => setState(() {
+                                _selectMode = true;
                                 _selectedKeys.clear();
                               }),
                             ),
-                            // 一键批量生成缺失标题（单次请求打包全部）
-                            ActionChip(
-                              avatar: _batchTitle
-                                  ? const SizedBox(
-                                      width: 14,
-                                      height: 14,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                      ),
-                                    )
-                                  : const Icon(Icons.auto_awesome, size: 15),
-                              label: Text(
-                                _batchTitle ? '生成中…' : '生成缺失标题',
-                                style: const TextStyle(fontSize: 12),
-                              ),
-                              onPressed: _batchTitle ? null : _runBatchTitle,
-                            ),
                           ],
+                        );
+                      },
+                    ),
+                    if (deleted.isNotEmpty)
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextButton.icon(
+                          onPressed: () {
+                            settings.restoreDeleted();
+                            setState(() {});
+                          },
+                          icon: const Icon(Icons.restore_rounded, size: 16),
+                          label: Text('恢复已删除的 ${deleted.length} 项'),
                         ),
                       ),
-                      const SizedBox(height: 6),
-                      // 窄屏换行：搜索框独占一行，排序/视图/管理退到第二行
-                      LayoutBuilder(
-                        builder: (context, box) {
-                          final narrow = box.maxWidth < 560;
-                          return Wrap(
-                            key: _kSearch,
-                            spacing: 6,
-                            runSpacing: 6,
-                            crossAxisAlignment: WrapCrossAlignment.center,
-                            children: [
-                              SizedBox(
-                                width: (narrow
-                                        ? box.maxWidth
-                                        : box.maxWidth - 236)
-                                    .clamp(180.0, box.maxWidth),
-                                child: TextField(
-                                  controller: _search,
-                                  decoration: InputDecoration(
-                                    isDense: true,
-                                    hintText: '搜索标题 / 题号…',
-                                    prefixIcon: const Icon(
-                                      Icons.search,
-                                      size: 20,
-                                    ),
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(14),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              PopupMenuButton<_SortMode>(
-                            tooltip: '排序方式',
-                            onSelected: (v) => setState(() => _sort = v),
-                            itemBuilder: (_) => const [
-                              PopupMenuItem(
-                                value: _SortMode.newest,
-                                child: Text('时间 · 最新优先'),
-                              ),
-                              PopupMenuItem(
-                                value: _SortMode.oldest,
-                                child: Text('时间 · 最早优先'),
-                              ),
-                              PopupMenuItem(
-                                value: _SortMode.titleAsc,
-                                child: Text('标题 · A → Z'),
-                              ),
-                              PopupMenuItem(
-                                value: _SortMode.titleDesc,
-                                child: Text('标题 · Z → A'),
-                              ),
-                            ],
-                            child: Chip(
-                              avatar: Icon(
-                                Icons.sort_rounded,
-                                size: 16,
-                                color: cs.primary,
-                              ),
-                              label: Text(switch (_sort) {
-                                _SortMode.newest => '最新',
-                                _SortMode.oldest => '最早',
-                                _SortMode.titleAsc => 'A-Z',
-                                _SortMode.titleDesc => 'Z-A',
-                              }, style: Theme.of(context).textTheme.labelSmall),
-                              visualDensity: VisualDensity.compact,
-                            ),
-                          ),
-                              PopupMenuButton<int>(
-                            tooltip: '展示方式',
-                            onSelected: (v) => setState(() {
-                              if (v == -1) {
-                                _autoView = true;
-                              } else {
-                                _autoView = false;
-                                _view = v == 1
-                                    ? _ViewMode.grid
-                                    : _ViewMode.detail;
-                              }
-                            }),
-                            itemBuilder: (_) => [
-                              PopupMenuItem(
-                                value: -1,
-                                child: Row(
-                                  children: [
-                                    if (_autoView)
-                                      const Icon(Icons.check, size: 16),
-                                    if (!_autoView) const SizedBox(width: 16),
-                                    const Text('自动（详细展示）'),
-                                  ],
-                                ),
-                              ),
-                              const PopupMenuItem(
-                                value: 0,
-                                child: Text('详细展示'),
-                              ),
-                              const PopupMenuItem(
-                                value: 1,
-                                child: Text('紧凑网格（小卡片）'),
-                              ),
-                            ],
-                            child: Chip(
-                              avatar: Icon(
-                                _autoView
-                                    ? Icons.auto_mode_rounded
-                                    : view == _ViewMode.detail
-                                    ? Icons.view_list_rounded
-                                    : Icons.grid_view_rounded,
-                                size: 16,
-                                color: cs.primary,
-                              ),
-                              label: Text(
-                                _autoView
-                                    ? '自动'
-                                    : view == _ViewMode.detail
-                                    ? '详细'
-                                    : '紧凑',
-                                style: Theme.of(context).textTheme.labelSmall,
-                              ),
-                              visualDensity: VisualDensity.compact,
-                            ),
-                          ),
-                              IconButton(
-                                tooltip: '管理作业',
-                                icon: const Icon(
-                                  Icons.checklist_rounded,
-                                  size: 20,
-                                ),
-                                onPressed: () => setState(() {
-                                  _selectMode = true;
-                                  _selectedKeys.clear();
-                                }),
-                              ),
-                            ],
-                          );
-                        },
+                    const SizedBox(height: 10),
+                  ],
+                ),
+              ),
+            ),
+            if (_selectMode)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                  // 窄屏放不下「计数 + 4 个操作」，用 Wrap 换行而不是溢出
+                  child: Wrap(
+                    spacing: 4,
+                    runSpacing: 4,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      Text(
+                        '已选 ${_selectedKeys.length} 个文件夹',
+                        style: const TextStyle(fontSize: 12),
                       ),
-                      if (deleted.isNotEmpty)
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: TextButton.icon(
-                            onPressed: () {
-                              settings.restoreDeleted();
-                              setState(() {});
-                            },
-                            icon: const Icon(Icons.restore_rounded, size: 16),
-                            label: Text('恢复已删除的 ${deleted.length} 项'),
-                          ),
+                      TextButton(
+                        onPressed: () => _selectAll(groups),
+                        child: const Text('全选'),
+                      ),
+                      TextButton.icon(
+                        onPressed: _selectedKeys.isEmpty
+                            ? null
+                            : () => _bulkDelete(groups),
+                        icon: const Icon(
+                          Icons.delete_outline_rounded,
+                          size: 16,
                         ),
-                      const SizedBox(height: 10),
+                        label: const Text('永久删除'),
+                      ),
+                      TextButton.icon(
+                        onPressed: _selectedKeys.isEmpty
+                            ? null
+                            : () => _bulkComplete(
+                                groups,
+                                _showDone ? false : true,
+                              ),
+                        icon: const Icon(
+                          Icons.check_circle_outline_rounded,
+                          size: 16,
+                        ),
+                        label: Text(_showDone ? '恢复' : '完成'),
+                      ),
+                      IconButton(
+                        tooltip: '退出多选',
+                        onPressed: _exitSelect,
+                        icon: const Icon(Icons.close_rounded, size: 18),
+                      ),
                     ],
                   ),
                 ),
               ),
-              if (_selectMode)
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                    // 窄屏放不下「计数 + 4 个操作」，用 Wrap 换行而不是溢出
-                    child: Wrap(
-                      spacing: 4,
-                      runSpacing: 4,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        Text(
-                          '已选 ${_selectedKeys.length} 个文件夹',
-                          style: const TextStyle(fontSize: 12),
-                        ),
-                        TextButton(
-                          onPressed: () => _selectAll(groups),
-                          child: const Text('全选'),
-                        ),
-                        TextButton.icon(
-                          onPressed: _selectedKeys.isEmpty
-                              ? null
-                              : () => _bulkDelete(groups),
-                          icon: const Icon(
-                            Icons.delete_outline_rounded,
-                            size: 16,
-                          ),
-                          label: const Text('永久删除'),
-                        ),
-                        TextButton.icon(
-                          onPressed: _selectedKeys.isEmpty
-                              ? null
-                              : () => _bulkComplete(
-                                  groups,
-                                  _showDone ? false : true,
-                                ),
-                          icon: const Icon(
-                            Icons.check_circle_outline_rounded,
-                            size: 16,
-                          ),
-                          label: Text(_showDone ? '恢复' : '完成'),
-                        ),
-                        IconButton(
-                          tooltip: '退出多选',
-                          onPressed: _exitSelect,
-                          icon: const Icon(Icons.close_rounded, size: 18),
-                        ),
-                      ],
-                    ),
+            if (ds.scanning && ds.entries.isEmpty)
+              const SliverFillRemaining(
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else if (filtered.isEmpty)
+              SliverFillRemaining(
+                hasScrollBody: false,
+                child: _EmptyState(
+                  onPickRoot: showRootAction ? _pickRoot : null,
+                  onWalkthrough: Platform.isAndroid ? _openWalkthrough : null,
+                ),
+              )
+            else if (gridCols == 0)
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 110),
+                sliver: SliverList.separated(
+                  itemCount: groups.length,
+                  separatorBuilder: (_, _) => const SizedBox(height: 10),
+                  itemBuilder: (context, i) => _buildItem(
+                    context,
+                    groups[i],
+                    key: i == 0 ? _kList : null,
                   ),
                 ),
-              if (ds.scanning && ds.entries.isEmpty)
-                const SliverFillRemaining(
-                  child: Center(child: CircularProgressIndicator()),
-                )
-              else if (filtered.isEmpty)
-                SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: _EmptyState(
-                    onPickRoot: showRootAction ? _pickRoot : null,
-                    onWalkthrough: Platform.isAndroid ? _openWalkthrough : null,
+              )
+            else
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 110),
+                sliver: SliverGrid.builder(
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: gridCols,
+                    mainAxisSpacing: 8,
+                    crossAxisSpacing: 8,
+                    childAspectRatio: 1.35,
                   ),
-                )
-              else if (gridCols == 0)
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 110),
-                  sliver: SliverList.separated(
-                    itemCount: groups.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: 10),
-                    itemBuilder: (context, i) => _buildItem(
-                      context,
-                      groups[i],
-                      key: i == 0 ? _kList : null,
-                    ),
-                  ),
-                )
-              else
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 110),
-                  sliver: SliverGrid.builder(
-                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: gridCols,
-                      mainAxisSpacing: 8,
-                      crossAxisSpacing: 8,
-                      childAspectRatio: 1.35,
-                    ),
-                    itemCount: groups.length,
-                    itemBuilder: (context, i) => _GroupTile(
-                      g: groups[i],
-                      onTap: () => _selectMode
-                          ? _toggleSelect(groups[i])
-                          : _open(groups[i]),
-                      onLongPress: () => _enterSelect(groups[i]),
-                      selecting: _selectMode,
-                      selected: _selectedKeys.contains(_groupKey(groups[i])),
-                    ),
+                  itemCount: groups.length,
+                  itemBuilder: (context, i) => _GroupTile(
+                    g: groups[i],
+                    onTap: () => _selectMode
+                        ? _toggleSelect(groups[i])
+                        : _open(groups[i]),
+                    onLongPress: () => _enterSelect(groups[i]),
+                    selecting: _selectMode,
+                    selected: _selectedKeys.contains(_groupKey(groups[i])),
                   ),
                 ),
-            ],
-          ),
+              ),
+          ],
         ),
       ),
     );
@@ -809,13 +856,13 @@ class _HomeworkPageState extends State<HomeworkPage> {
   }
 
   Widget _filterChip(EtsStructure? s, String label, ColorScheme cs) {
-    final selected = _filter == s;
     return Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: FilterChip(
-        selected: selected,
-        label: Text(label),
-        onSelected: (_) => setState(() => _filter = s),
+      padding: const EdgeInsets.only(right: AppSpace.sm),
+      child: PillTab(
+        label: label,
+        selected: _filter == s,
+        filled: true,
+        onTap: () => setState(() => _filter = s),
       ),
     );
   }
@@ -844,6 +891,7 @@ class _GroupCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final b = Theme.of(context).brightness;
     final done = context.watch<SettingsService>().completedDirs.contains(
       group.entries.first.dir,
     );
@@ -856,17 +904,18 @@ class _GroupCard extends StatelessWidget {
         color: selected
             ? cs.primary.withValues(alpha: 0.12)
             : cs.surfaceContainerLowest,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: AppRadius.cardR,
         border: Border.all(
           color: selected
               ? cs.primary
               : done
-              ? Colors.green.withValues(alpha: 0.4)
-              : cs.outlineVariant.withValues(alpha: 0.5),
+              ? StyleTokens.success.withValues(alpha: 0.4)
+              : StyleTokens.borderOf(b).withValues(alpha: 0.9),
         ),
+        boxShadow: AppShadow.card(b),
       ),
       child: InkWell(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: AppRadius.cardR,
         onTap: onTap,
         onLongPress: onLongPress,
         child: Padding(
@@ -968,6 +1017,7 @@ class _GroupTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final b = Theme.of(context).brightness;
     final done = context.watch<SettingsService>().completedDirs.contains(
       g.entries.first.dir,
     );
@@ -976,15 +1026,16 @@ class _GroupTile extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: cs.surfaceContainerLowest,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: AppRadius.cardR,
         border: Border.all(
           color: done
-              ? Colors.green.withValues(alpha: 0.4)
-              : cs.outlineVariant.withValues(alpha: 0.5),
+              ? StyleTokens.success.withValues(alpha: 0.4)
+              : StyleTokens.borderOf(b).withValues(alpha: 0.9),
         ),
+        boxShadow: AppShadow.sm(b),
       ),
       child: InkWell(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: AppRadius.cardR,
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../services/ets_data_service.dart';
 import '../../services/settings_service.dart';
-import '../../widgets/style.dart';
+import '../../widgets/glass.dart';
 import '../../app/home_shell.dart';
 
 /// 首次启动新手教程：功能介绍 → 数据来源 → AI 配置 → 开始
@@ -76,8 +76,8 @@ class _OnboardingPageState extends State<OnboardingPage> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    return Scaffold(
-      backgroundColor: StyleTokens.bgOf(Theme.of(context).brightness),
+    // 引导页也是控制层/内容层混排，补上背景墙，与主应用同一套视觉
+    return GlassScaffold(
       body: SafeArea(
         child: Column(
           children: [

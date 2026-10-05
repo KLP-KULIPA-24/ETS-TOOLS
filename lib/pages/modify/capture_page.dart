@@ -312,6 +312,7 @@ class _CapturePageState extends State<CapturePage> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     return GlassScaffold(
+      wall: false,
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [

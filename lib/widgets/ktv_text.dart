@@ -142,9 +142,7 @@ class _KtvTextState extends State<KtvText> {
       );
     }
     // 句子来源：显式时间轴优先；否则按文本分句 + 时长比例分配
-    _recomputeSegs(
-      widget.durationSec > 0 ? widget.durationSec : _psDur,
-    );
+    _recomputeSegs(widget.durationSec > 0 ? widget.durationSec : _psDur);
     final segs = _segs;
     // 完整原文底稿（所有文字与标点都在）——高亮只在其中染色，绝不丢字
     final plain = _plain();

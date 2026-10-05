@@ -547,7 +547,6 @@ class EtsHelperApp extends StatelessWidget {
       ],
       child: Consumer<SettingsService>(
         builder: (context, s, _) {
-          final glass = s.styleMode == AppStyle.glass;
           return MaterialApp(
             navigatorKey: Achievements.navigatorKey,
             // 返回上一级页面即停止朗读/TTS；退出软件到后台或锁屏不受影响（无 pop 发生）
@@ -563,7 +562,6 @@ class EtsHelperApp extends StatelessWidget {
                 brightness: Brightness.light,
               ),
               Brightness.light,
-              glass: glass,
             ),
             darkTheme: _theme(
               ColorScheme.fromSeed(
@@ -571,7 +569,6 @@ class EtsHelperApp extends StatelessWidget {
                 brightness: Brightness.dark,
               ),
               Brightness.dark,
-              glass: glass,
             ),
             home: s.onboardDone ? const HomeShell() : const OnboardingPage(),
             builder: (context, child) => _WindowChrome(
@@ -596,9 +593,8 @@ class EtsHelperApp extends StatelessWidget {
     );
   }
 
-  ThemeData _theme(ColorScheme scheme, Brightness b, {required bool glass}) {
-    // docs/style-pack/tokens.json：bg/surface/border/text 深色为规范值，浅色派生
-    final bg = StyleTokens.bgOf(b);
+  ThemeData _theme(ColorScheme scheme, Brightness b) {
+    // docs/style-pack/tokens.json：surface/border/text 深色为规范值，浅色派生
     final surface = StyleTokens.surfaceOf(b);
     final borderColor = StyleTokens.borderOf(b);
     final themed = scheme.copyWith(
@@ -618,11 +614,11 @@ class EtsHelperApp extends StatelessWidget {
       useMaterial3: true,
       colorScheme: themed,
       brightness: b,
-      scaffoldBackgroundColor: glass ? Colors.transparent : bg,
+      scaffoldBackgroundColor: Colors.transparent,
       appBarTheme: AppBarTheme(
         elevation: 0,
         scrolledUnderElevation: 0,
-        backgroundColor: glass ? Colors.transparent : surface,
+        backgroundColor: Colors.transparent,
         surfaceTintColor: Colors.transparent,
         foregroundColor: StyleTokens.textOf(b),
         titleTextStyle: TextStyle(
@@ -673,18 +669,25 @@ class EtsHelperApp extends StatelessWidget {
         space: 1,
       ),
       chipTheme: ChipThemeData(
-        // iOS 26 质感：胶囊、无硬边、底色轻透（选中=主题色微染）
-        backgroundColor: StyleTokens.textOf(b).withValues(alpha: 0.05),
-        selectedColor: themed.primary.withValues(alpha: 0.14),
-        checkmarkColor: themed.primary,
+        // iOS 26 质感：胶囊、无硬边。选中态给**实色**主题色 + 白字——
+        // 此前是 primary@0.14 的淡染，全屏没有一处实色落点，
+        // 主题色一进界面就被稀释成灰，整页读作"灰蒙蒙"的根因之一。
+        backgroundColor: StyleTokens.textOf(b).withValues(alpha: 0.06),
+        selectedColor: themed.primary,
+        checkmarkColor: Colors.white,
         side: BorderSide.none,
         shape: const StadiumBorder(),
-        labelStyle: TextStyle(fontSize: 13, color: StyleTokens.textOf(b)),
-        secondaryLabelStyle: TextStyle(
-          fontSize: 13,
+        labelStyle: TextStyle(
+          fontSize: AppText.sm,
+          fontWeight: AppText.wMedium,
           color: StyleTokens.textOf(b),
         ),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        secondaryLabelStyle: TextStyle(
+          fontSize: AppText.sm,
+          fontWeight: AppText.wBold,
+          color: Colors.white,
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
@@ -707,18 +710,26 @@ class EtsHelperApp extends StatelessWidget {
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: StyleTokens.textOf(b).withValues(alpha: 0.05),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(999),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: AppSpace.lg,
+          vertical: AppSpace.md,
+        ),
+        hintStyle: TextStyle(
+          fontSize: AppText.md,
+          color: StyleTokens.textMutedOf(b).withValues(alpha: 0.7),
+        ),
+        border: const OutlineInputBorder(
+          borderRadius: AppRadius.capsule,
           borderSide: BorderSide.none,
         ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(999),
+        enabledBorder: const OutlineInputBorder(
+          borderRadius: AppRadius.capsule,
           borderSide: BorderSide.none,
         ),
+        // 聚焦时给**实色**主题色描边（components.md：focus 变 primary、不加外发光）
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(999),
-          borderSide: BorderSide(color: themed.primary.withValues(alpha: 0.5)),
+          borderRadius: AppRadius.capsule,
+          borderSide: BorderSide(color: themed.primary, width: 1.5),
         ),
       ),
       // 控件胶囊形（style-pack: control = capsule）+ 轻透底，替掉默认 Material 硬边按钮

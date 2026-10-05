@@ -54,9 +54,7 @@ class _InlineAudioButtonState extends State<InlineAudioButton> {
             }
           },
           icon: Icon(
-            active && ps.playing
-                ? Icons.pause_circle_rounded
-                : widget.icon,
+            active && ps.playing ? Icons.pause_circle_rounded : widget.icon,
             color: active ? cs.primary : null,
           ),
         );

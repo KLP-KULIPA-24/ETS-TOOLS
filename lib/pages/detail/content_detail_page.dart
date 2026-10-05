@@ -10,6 +10,7 @@ import '../ai/ai_chat_page.dart';
 import '../homework/exam_sim_page.dart';
 import '../../widgets/glass.dart';
 import '../../widgets/interactive_tour.dart';
+import '../../widgets/style.dart';
 import 'paper_detail_view.dart';
 import 'typed_views.dart';
 
@@ -53,7 +54,6 @@ class _ContentDetailPageState extends State<ContentDetailPage> {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
     final e = widget.entry;
 
     Widget body;
@@ -69,23 +69,11 @@ class _ContentDetailPageState extends State<ContentDetailPage> {
     }
 
     return GlassScaffold(
-      appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              e.title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 18),
-            ),
-            Text(
-              '${e.partLabel != null ? '${e.partLabel} · ' : ''}'
-              '${e.structure.label} · 标题来源：${e.titleSource.label}',
-              style: TextStyle(fontSize: 12, color: cs.outline),
-            ),
-          ],
-        ),
+      appBar: GlassTopBar(
+        title: e.title,
+        subtitle:
+            '${e.partLabel != null ? '${e.partLabel} · ' : ''}'
+            '${e.structure.label} · 标题来源：${e.titleSource.label}',
         actions: [
           // AI 顶部菜单：解析 / 翻译 / 标题 / 实时对话
           PopupMenuButton<String>(

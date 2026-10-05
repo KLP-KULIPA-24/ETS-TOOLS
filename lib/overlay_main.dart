@@ -10,7 +10,7 @@ import 'services/ai_service.dart';
 import 'services/audio_player_service.dart';
 import 'services/floating_bridge.dart';
 import 'services/settings_service.dart';
-import 'widgets/style.dart';
+import 'widgets/glass.dart';
 
 @pragma("vm:entry-point")
 void overlayMain() async {
@@ -150,8 +150,8 @@ class _OverlayHomeState extends State<OverlayHome> {
       backgroundColor: Colors.transparent,
       body: AnimatedSwitcher(
         duration: const Duration(milliseconds: 260),
-        child: LiquidGlass(
-          radius: BorderRadius.circular(24),
+        child: GlassContainer(
+          radius: 24,
           padding: const EdgeInsets.all(14),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,

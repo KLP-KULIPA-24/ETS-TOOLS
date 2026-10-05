@@ -56,7 +56,8 @@ class UpdateService {
   static const _timeout = Duration(seconds: 8);
 
   /// 只允许 https + 白名单主机（顺带挡掉内网 / 回环 / 保留地址）
-  static bool isAllowed(Uri u) => u.scheme == 'https' && _hosts.contains(u.host);
+  static bool isAllowed(Uri u) =>
+      u.scheme == 'https' && _hosts.contains(u.host);
 
   String? _lastSiteError;
 

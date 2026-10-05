@@ -1,16 +1,14 @@
 /// 样式基建（对齐 docs/style-pack/tokens.json）：
-/// - AppCard：内容层实底卡（surface + border + radius16 + shadow.sm）
-/// - LiquidGlass：控制层玻璃（导航/工具栏/浮动控件），胶囊或指定圆角
+/// - AppRadius / AppSpace / AppShadow / AppText：规范值常量层
+/// - AppCard：内容层实底卡（surface + border + radius16 + shadow.card）
+/// - GlassTopBar：控制层玻璃顶栏（导航/工具栏）
 /// - PressableScale：pointer-down 按压缩放反馈（0.97 / 120ms）
 /// - Qbounce：三段式 Q 弹动画（0.92 → 1.05 → 1，280ms）
 library;
 
-import 'dart:ui' show ImageFilter;
-
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 
-import '../services/settings_service.dart';
+import 'glass.dart';
 
 /// token 颜色（深色为规范值；浅色为派生）
 class StyleTokens {
@@ -20,7 +18,22 @@ class StyleTokens {
   static const darkText = Color(0xFFE6E8EC);
   static const darkTextMuted = Color(0xFF9AA1AC);
   static const glassTintDark = Color(0x24FFFFFF); // rgba(255,255,255,0.14)
-  static const glassTintLight = Color(0x3DFFFFFF); // 白 0.24（iOS 26 通透玻璃）
+  // 浅色玻璃 tint 对齐网页版 docs/index.html 的 --glass-tint: rgba(255,255,255,.55)。
+  // 之前压到 0.24 是"没有 saturate 时靠降透明度掩盖发灰"的补偿，
+  // saturate 补上后就不再需要压这么低。
+  // 浅色玻璃 tint：压得越低越透，玻璃感越强（背景要真有颜色才看得出模糊）。
+  // 网页版是 .55，但网页背景有大幅色块；App 背景更安静，这里取 .34。
+  static const glassTintLight = Color(0x57FFFFFF); // 白 0.34
+  static const defaultAccent = Color(0xFF4F7CFF); // tokens.json primary
+
+  // 语义色：来源是 common.dart 里那套已验证的题型徽章色 —— 全库唯一
+  // 真正醒目、且用「低透明底 + 纯色字」处理得成熟的范式。提升为全局色板。
+  static const success = Color(0xFF2E7D32);
+  static const info = Color(0xFF1565C0);
+  static const purple = Color(0xFF6A1B9A);
+  static const warning = Color(0xFFEF6C00);
+  static const teal = Color(0xFF00838F);
+  static const danger = Color(0xFFB3261E);
 
   static Color bgOf(Brightness b) =>
       b == Brightness.dark ? darkBg : const Color(0xFFF6F7F9);
@@ -33,6 +46,63 @@ class StyleTokens {
   // 浅色主题次要文字加深：0x6B7280 在白卡上太灰（"灰蒙蒙"主因之一）
   static Color textMutedOf(Brightness b) =>
       b == Brightness.dark ? darkTextMuted : const Color(0xFF4B5260);
+
+  /// 全应用统一的「实色落点」取色。
+  ///
+  /// 必须取 `colorScheme.primary` 而不是设置页存的原始 accent：
+  /// ColorScheme.fromSeed 会把种子色映射到 M3 的色调梯度，得到的 primary
+  /// 明显更深；此前导航胶囊用原始色、chip 用派生色，同一套语言出现两种蓝。
+  static Color accentOf(BuildContext context) =>
+      Theme.of(context).colorScheme.primary;
+}
+
+/// 圆角（tokens.json radius）
+class AppRadius {
+  static const card = 16.0;
+  static const sheet = 10.0;
+  static const input = 999.0; // 控制族统一胶囊（按钮/chip/输入框）
+  static const control = 999.0;
+
+  static const cardR = BorderRadius.all(Radius.circular(card));
+  static const sheetR = BorderRadius.all(Radius.circular(sheet));
+  static const capsule = BorderRadius.all(Radius.circular(control));
+}
+
+/// 间距（tokens.json space）
+class AppSpace {
+  static const xs = 4.0;
+  static const sm = 8.0;
+  static const md = 12.0;
+  static const lg = 16.0;
+  static const xl = 24.0;
+  static const xxl = 32.0;
+  static const huge = 48.0;
+}
+
+/// 阴影（tokens.json shadow）
+///
+/// **整表保留但一律为空**：原先给卡片挂了 `blur 24 / offset(0,8)` 的柔影，
+/// 实际渲染时阴影会向上漫到卡片顶边，在浅底上糊出一条灰带——正是用户嫌恶的
+/// "阴影效果"。层次改由「158° 斜向渐变 + 发丝边 + 顶缘内高光」承担，
+/// 和网页版 `.card` 的做法一致（它的 inset 高光也不带外部投影）。
+/// 这里保留空实现是为了让调用点不必再改，日后若要恢复投影只改这一处。
+class AppShadow {
+  static List<BoxShadow> card(Brightness b) => const [];
+  static List<BoxShadow> sm(Brightness b) => const [];
+  static const glass = <BoxShadow>[];
+}
+
+/// 字号与字重（tokens.json font）
+class AppText {
+  static const xs = 12.0;
+  static const sm = 13.0;
+  static const md = 14.0;
+  static const lg = 18.0;
+  static const xl = 24.0;
+
+  static const wNormal = FontWeight.w400;
+  static const wMedium = FontWeight.w500;
+  static const wBold = FontWeight.w600;
 }
 
 /// 内容层实底卡（列表、卡片、设置块等——禁止玻璃）
@@ -63,17 +133,36 @@ class AppCard extends StatelessWidget {
     final b = Theme.of(context).brightness;
     final dark = b == Brightness.dark;
     final radiusR = BorderRadius.circular(radius);
-    final body = Container(
-      margin: margin,
+    // 内容层**不做玻璃**（style-pack：玻璃只给导航/控制层）：近实体卡片 +
+    // 细边。用户明确反馈过"太模糊、不要这么透明模糊"——内容卡不再垫
+    // BackdropFilter，底色也收成近实体，只留一道极淡的 158° 斜向渐变，
+    // 让卡片和背景有一点点分层感就够了。
+    Widget body = Container(
       padding: padding,
       decoration: BoxDecoration(
-        // 内容层**不做玻璃**（style-pack：玻璃只给导航/控制层）：
-        // 干净的近实体卡片 + 细边 + 柔影，玻璃只留给顶栏/导航胶囊/悬浮控件
-        color:
-            color ??
-            (dark
-                ? StyleTokens.surfaceOf(b).withValues(alpha: 0.92)
-                : Colors.white.withValues(alpha: 0.93)),
+        gradient: color == null
+            ? LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: dark
+                    ? [
+                        Color.alphaBlend(
+                          Colors.white.withValues(alpha: 0.085),
+                          const Color(0xFF222836),
+                        ),
+                        Color.alphaBlend(
+                          Colors.white.withValues(alpha: 0.02),
+                          const Color(0xFF1B202C),
+                        ),
+                      ]
+                    : [
+                        Colors.white.withValues(alpha: 0.97),
+                        Colors.white.withValues(alpha: 0.90),
+                      ],
+                stops: const [0, 0.62],
+              )
+            : null,
+        color: color,
         borderRadius: radiusR,
         border: Border.all(
           color:
@@ -82,34 +171,26 @@ class AppCard extends StatelessWidget {
                   ? StyleTokens.borderOf(b).withValues(alpha: 0.9)
                   : const Color(0x1F111628)),
         ), // 浅色：灰蓝细边（白边在白底上等于没有）
-        boxShadow: [
-          // 柔和纵深：iOS 卡片那种"轻轻浮起来"的影子
-          BoxShadow(
-            color: Color.alphaBlend(
-              Colors.black.withValues(alpha: dark ? 0.38 : 0.08),
-              Colors.transparent,
-            ),
-            blurRadius: dark ? 16 : 24,
-            offset: Offset(0, dark ? 5 : 8),
-            spreadRadius: -6,
-          ),
-        ],
+        boxShadow: AppShadow.card(b),
       ),
       // 顶缘内高光（液态玻璃的“边”）：**必须极淡** —— foregroundDecoration 盖在内容之上，
       // 浅色用白色高 alpha 会把标题/图标/说明文字一起冲淡（“灰蒙蒙”的真凶）
       foregroundDecoration: BoxDecoration(
         borderRadius: radiusR,
+        // 网页版的 `inset 0 1px 0 rgba(255,255,255,.9)`：顶缘一道清脆亮边。
+        // 之前摊成 40% 的白雾，反而把标题/图标一起冲淡（"灰蒙蒙"真凶）。
         gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
           colors: dark
-              ? [Colors.white.withValues(alpha: 0.05), Colors.transparent]
-              : [Colors.white.withValues(alpha: 0.18), Colors.transparent],
-          stops: const [0, 0.42],
+              ? [Colors.white.withValues(alpha: 0.16), Colors.transparent]
+              : [Colors.white.withValues(alpha: 0.62), Colors.transparent],
+          stops: const [0, 0.10],
         ),
       ),
       child: child,
     );
+    if (margin != null) body = Padding(padding: margin!, child: body);
     if (onTap == null) return body;
     return PressableScale(
       child: InkWell(borderRadius: radiusR, onTap: onTap, child: body),
@@ -117,102 +198,189 @@ class AppCard extends StatelessWidget {
   }
 }
 
-/// 控制层 Liquid Glass（导航/工具栏/浮动控件专用；禁止用于内容层）
-class LiquidGlass extends StatelessWidget {
-  final Widget child;
-  final BorderRadius radius;
-  final EdgeInsetsGeometry? padding;
-  final bool clear; // clear 变体：富媒体上方播放控件（更淡 + 调暗层）
+/// 胶囊标签：底部导航项 / 筛选 chip / 排序 chip 全用这一个，
+/// 保证「选中=实色主题色 + 白图标白字」这套语言在上下两处完全一致。
+/// [filled] 让未选中态带一层极淡底（用于需要读出「可点」的筛选 chip），
+/// 底部导航则用默认的透明底。
+class PillTab extends StatelessWidget {
+  final String label;
+  final IconData? icon;
+  final bool selected;
+  final VoidCallback? onTap;
+  final bool filled;
+  final double height;
 
-  const LiquidGlass({
+  /// 自定义前缀（转圈等），给定时取代 [icon]
+  final Widget? leading;
+
+  /// 横排（筛选 chip）/ 竖排（底部导航项）。选中态语言两种方向完全一致。
+  final Axis axis;
+  final double iconSize;
+
+  const PillTab({
     super.key,
-    required this.child,
-    this.radius = const BorderRadius.all(Radius.circular(999)),
-    this.padding,
-    this.clear = false,
+    required this.label,
+    this.icon,
+    this.selected = false,
+    this.onTap,
+    this.filled = false,
+    this.height = 40,
+    this.leading,
+    this.axis = Axis.horizontal,
+    this.iconSize = 16,
   });
 
   @override
   Widget build(BuildContext context) {
-    final dark = Theme.of(context).brightness == Brightness.dark;
-    final accent = Color(context.watch<SettingsService>().accentValue);
-    final base = clear
-        ? (dark
-              ? Colors.black.withValues(alpha: 0.45)
-              : Colors.black.withValues(alpha: 0.25))
-        : (dark ? StyleTokens.glassTintDark : StyleTokens.glassTintLight);
-    // 主题色微量透进玻璃：材质"有色"而不是死白（iOS 26 的材质反应感）
-    // tint 压到 0.06/0.08：此前 0.15/0.20 叠上背景色斑后，
-    // 控制层（尤其 AI 对话顶栏）读作一块实色紫带，很突兀
-    final tint = Color.alphaBlend(
-      accent.withValues(alpha: dark ? 0.08 : 0.06),
-      base,
-    );
-    return ClipRRect(
-      borderRadius: radius,
-      // ===== iOS 26 液态玻璃控制层：三层深度折射（6/18/38）=====
-      // 近层保留高频细节、中层过渡、远层大面积虚化——透镜厚度感
-      child: Stack(
+    final cs = Theme.of(context).colorScheme;
+    final b = Theme.of(context).brightness;
+    // 前景用 onPrimary 而非硬编码白：浅色主题 primary 深 → onPrimary 是白；
+    // 深色主题 primary 变浅 → onPrimary 随之变深。写死白色在深色下会糊成一片。
+    final fg = selected ? cs.onPrimary : cs.onSurfaceVariant;
+    final gap = axis == Axis.vertical
+        ? const SizedBox(height: AppSpace.xs)
+        : const SizedBox(width: AppSpace.xs);
+    Widget inner = Container(
+      height: height,
+      padding: const EdgeInsets.symmetric(horizontal: AppSpace.md),
+      decoration: BoxDecoration(
+        color: selected
+            ? StyleTokens.accentOf(context)
+            : (filled
+                  ? StyleTokens.textOf(b).withValues(alpha: 0.06)
+                  : Colors.transparent),
+        borderRadius: AppRadius.capsule,
+      ),
+      child: Flex(
+        direction: axis,
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Positioned.fill(
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
-              child: const SizedBox.expand(),
-            ),
-          ),
-          Positioned.fill(
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-              child: const SizedBox.expand(),
-            ),
-          ),
-          Positioned.fill(
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 38, sigmaY: 38),
-              child: const SizedBox.expand(),
-            ),
-          ),
-          Container(
-            padding: padding,
-            foregroundDecoration: clear
-                ? BoxDecoration(
-                    borderRadius: radius,
-                    color: Colors.black.withValues(alpha: 0.10),
-                  )
-                : BoxDecoration(
-                    // 顶缘高光带 + 底缘微暗：控制层更薄的“玻璃边”
-                    borderRadius: radius,
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        Colors.white.withValues(alpha: dark ? 0.16 : 0.34),
-                        Colors.white.withValues(alpha: 0.0),
-                        Colors.black.withValues(alpha: dark ? 0.08 : 0.02),
-                      ],
-                      stops: const [0, 0.45, 1],
-                    ),
-                  ),
-            decoration: BoxDecoration(
-              color: tint,
-              borderRadius: radius,
-              border: Border.all(
-                width: 1.1,
-                color: dark
-                    ? Colors.white.withValues(alpha: 0.26)
-                    : Colors.white.withValues(alpha: 0.92),
+          if (leading != null) ...[
+            SizedBox(
+              width: 16,
+              height: 16,
+              child: Center(
+                child: IconTheme(
+                  data: IconThemeData(color: fg, size: 16),
+                  child: leading!,
+                ),
               ),
-              boxShadow: const [
-                BoxShadow(
-                  color: Color(0x33000000),
-                  blurRadius: 8,
-                  offset: Offset(0, 2),
-                ), // shadow.glass
-              ],
             ),
-            child: child,
+            gap,
+          ] else if (icon != null) ...[
+            Icon(icon, size: iconSize, color: fg),
+            gap,
+          ],
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: AppText.sm,
+                fontWeight: selected ? AppText.wBold : AppText.wMedium,
+                color: fg,
+              ),
+            ),
           ),
         ],
+      ),
+    );
+    inner = Qbounce(trigger: selected ? 1 : -1, child: inner);
+    if (onTap == null) return inner;
+    return PressableScale(onTap: onTap, child: inner);
+  }
+}
+
+/// 控制层玻璃顶栏（工具栏/导航栏专用；禁止用于内容层）
+///
+/// 全应用统一走这一个：壳顶栏、详情页、AI 页都用它，杜绝再出现
+/// 「一个实一个透」的两套顶栏语言。底缘发丝线在浅色下用深灰蓝，
+/// 不用白——白线压在浅背景上等于隐形。
+class GlassTopBar extends StatelessWidget implements PreferredSizeWidget {
+  final String title;
+  final String? subtitle;
+  final List<Widget> actions;
+  final Widget? leading;
+
+  /// 品牌图标。**不能**塞给 AppBar 的 leading 槽——那个槽宽度固定，
+  /// 会把图标横向撑开再被 BoxFit.cover 压扁。放进标题行里才拿得到正方约束。
+  final Widget? logo;
+
+  const GlassTopBar({
+    super.key,
+    required this.title,
+    this.subtitle,
+    this.actions = const [],
+    this.leading,
+    this.logo,
+  });
+
+  @override
+  Size get preferredSize =>
+      Size.fromHeight(kToolbarHeight + (subtitle == null ? 0 : 14));
+
+  @override
+  Widget build(BuildContext context) {
+    final b = Theme.of(context).brightness;
+    final dark = b == Brightness.dark;
+    return GlassContainer(
+      radius: 0,
+      color: dark
+          ? const Color(0xFF141A26).withValues(alpha: 0.62)
+          : Colors.white.withValues(alpha: 0.66),
+      border: Border(
+        bottom: BorderSide(
+          color: dark
+              ? Colors.white.withValues(alpha: 0.10)
+              : StyleTokens.borderOf(b).withValues(alpha: 0.9),
+        ),
+      ),
+      child: AppBar(
+        backgroundColor: Colors.transparent,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        centerTitle: false,
+        titleSpacing: 16,
+        leading: leading,
+        title: Row(
+          children: [
+            if (logo != null) ...[logo!, const SizedBox(width: AppSpace.md)],
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: AppText.lg,
+                      fontWeight: AppText.wBold,
+                      letterSpacing: -0.2,
+                      color: StyleTokens.textOf(b),
+                    ),
+                  ),
+                  if (subtitle != null)
+                    Text(
+                      subtitle!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: AppText.xs,
+                        fontWeight: AppText.wMedium,
+                        color: StyleTokens.accentOf(context),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: actions,
       ),
     );
   }

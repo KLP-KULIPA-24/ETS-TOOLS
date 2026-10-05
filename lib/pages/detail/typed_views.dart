@@ -14,12 +14,14 @@ import '../../services/lexicon_service.dart';
 import '../../services/media_share.dart';
 import '../../services/settings_service.dart';
 import '../../services/tts_service.dart';
+import '../../services/word_gloss_service.dart';
 import '../../widgets/audio_bar.dart';
 import '../../widgets/common.dart';
 import '../../widgets/ets_text.dart';
 import '../../widgets/smart_text.dart';
 import '../../widgets/inline_audio_button.dart';
 import '../../widgets/ktv_text.dart';
+import '../../widgets/style.dart';
 import '../../widgets/video_card.dart';
 
 /// 按题型分发的内容视图
@@ -281,98 +283,240 @@ void showAskAiSheet(BuildContext context, String sel) {
   );
 }
 
-/// 单词释义弹层：内置词典（音标/释义/原版发音）+ TTS 朗读
+/// 单词释义弹层
+///
+/// 释义 = **AI 生成并本地缓存**（见 WordGlossService）；
+/// 音标与真人发音 = 内置词典（pc_xst_dict）——那部分是即时且免费的，
+/// 没有理由不去查。朗读走 Edge TTS。
 void showWordSheet(BuildContext context, String raw) {
   final word = raw.trim().split(RegExp(r'\s+')).first;
   final lex = LexiconService.I.lookup(word);
   showModalBottomSheet(
     context: context,
     showDragHandle: true,
-    builder: (ctx) {
-      final cs = Theme.of(ctx).colorScheme;
-      return SafeArea(
-        child: Padding(
+    isScrollControlled: true,
+    builder: (ctx) => _WordSheet(word: word, lex: lex),
+  );
+}
+
+class _WordSheet extends StatefulWidget {
+  final String word;
+  final LexEntry? lex;
+
+  const _WordSheet({required this.word, this.lex});
+
+  @override
+  State<_WordSheet> createState() => _WordSheetState();
+}
+
+class _WordSheetState extends State<_WordSheet> {
+  /// AI 释义原文；null = 还没好或失败
+  String? _gloss;
+  String? _error;
+  bool _loading = true;
+  bool _fromCache = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final cached = WordGlossService.I.peek(widget.word);
+    if (cached != null && cached.isNotEmpty) {
+      setState(() {
+        _gloss = cached;
+        _fromCache = true;
+        _loading = false;
+      });
+      return;
+    }
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final text = await WordGlossService.I.gloss(widget.word);
+      if (!mounted) return;
+      setState(() {
+        _gloss = text;
+        _loading = false;
+        _error = text == null ? '暂时无法生成释义，请检查网络或 AI 配置' : null;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = '释义失败：$e';
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final b = Theme.of(context).brightness;
+    final lex = widget.lex;
+    final parts = _gloss == null ? null : WordGlossService.splitGloss(_gloss!);
+    final mediaH = MediaQuery.of(context).size.height;
+
+    return SafeArea(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: mediaH * 0.8),
+        child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                word,
-                style: Theme.of(ctx).textTheme.headlineSmall
-                    ?.copyWith(fontWeight: FontWeight.w700),
+              // 单词 + 真人发音（词典给的即时资产）
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      widget.word,
+                      style: Theme.of(context).textTheme.headlineSmall
+                          ?.copyWith(fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                  if (lex != null && lex.audioUs.isNotEmpty)
+                    IconButton(
+                      tooltip: '原版发音',
+                      onPressed: () => AudioPlayerService.I.open(lex.audioUs),
+                      icon: const Icon(Icons.hearing_rounded, size: 20),
+                    ),
+                ],
               ),
-              const SizedBox(height: 6),
-              if (lex != null) ...[
-                if (lex.phonUs.isNotEmpty || lex.phonEn.isNotEmpty)
+              if (lex != null &&
+                  (lex.phonUs.isNotEmpty || lex.phonEn.isNotEmpty)) ...[
+                const SizedBox(height: 4),
+                Wrap(
+                  spacing: 12,
+                  children: [
+                    if (lex.phonEn.isNotEmpty)
+                      Text(
+                        '英 ${lex.phonEn}',
+                        style: TextStyle(fontSize: 13, color: cs.outline),
+                      ),
+                    if (lex.phonUs.isNotEmpty)
+                      Text(
+                        '美 ${lex.phonUs}',
+                        style: TextStyle(fontSize: 13, color: cs.outline),
+                      ),
+                  ],
+                ),
+              ],
+              const SizedBox(height: 14),
+
+              // 释义主体：AI 生成
+              if (_loading)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 24),
+                  child: Center(
+                    child: SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  ),
+                )
+              else if (_error != null)
+                Text(_error!, style: TextStyle(fontSize: 13, color: cs.outline))
+              else ...[
+                if (_fromCache)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.history_rounded,
+                          size: 13,
+                          color: cs.outline,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          '来自本地缓存',
+                          style: TextStyle(fontSize: 11, color: cs.outline),
+                        ),
+                      ],
+                    ),
+                  ),
+                if (parts != null && parts.phon.isNotEmpty) ...[
                   Text(
-                    [
-                      if (lex.phonUs.isNotEmpty) '美 ${lex.phonUs}',
-                      if (lex.phonEn.isNotEmpty) '英 ${lex.phonEn}',
-                    ].join('   '),
+                    parts.phon,
                     style: TextStyle(fontSize: 13, color: cs.outline),
                   ),
-                const SizedBox(height: 8),
-                Text(
-                  lex.trans,
-                  style: const TextStyle(fontSize: 15, height: 1.5),
-                ),
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 10,
-                  children: [
-                    if (lex.audioUs.isNotEmpty)
-                      OutlinedButton.icon(
-                        onPressed: () => AudioPlayerService.I.open(lex.audioUs),
-                        icon: const Icon(Icons.volume_up_rounded, size: 16),
-                        label: const Text('美音'),
+                  const SizedBox(height: 8),
+                ],
+                if (parts != null && parts.def.isNotEmpty)
+                  Text(
+                    parts.def,
+                    style: const TextStyle(fontSize: 15, height: 1.6),
+                  ),
+                if (parts != null && parts.example.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(AppSpace.md),
+                    decoration: BoxDecoration(
+                      color: StyleTokens.accentOf(context)
+                          .withValues(alpha: 0.06),
+                      borderRadius: AppRadius.cardR,
+                      border: Border.all(
+                        color: StyleTokens.borderOf(b).withValues(alpha: 0.7),
                       ),
-                    if (lex.audioEn.isNotEmpty)
-                      OutlinedButton.icon(
-                        onPressed: () => AudioPlayerService.I.open(lex.audioEn),
-                        icon: const Icon(Icons.volume_up_rounded, size: 16),
-                        label: const Text('英音'),
+                    ),
+                    child: Text(
+                      parts.example,
+                      style: TextStyle(
+                        fontSize: 13,
+                        height: 1.55,
+                        color: StyleTokens.textMutedOf(b),
                       ),
-                    FilledButton.icon(
-                      onPressed: () => TtsService.I.speak(word),
+                    ),
+                  ),
+                ],
+              ],
+
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  if (_error != null)
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: _loading ? null : _load,
+                        icon: const Icon(Icons.refresh_rounded, size: 16),
+                        label: const Text('重试'),
+                      ),
+                    )
+                  else
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => Navigator.of(context).pop(),
+                        icon: const Icon(Icons.close_rounded, size: 16),
+                        label: const Text('关闭'),
+                      ),
+                    ),
+                  const SizedBox(width: AppSpace.md),
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: () => TtsService.I.speak(widget.word),
                       icon: const Icon(
                         Icons.record_voice_over_rounded,
                         size: 16,
                       ),
-                      label: const Text('朗读'),
+                      label: const Text('朗读这个词'),
                     ),
-                  ],
-                ),
-              ] else ...[
-                Text(
-                  '内置词典暂未收录这个词。',
-                  style: TextStyle(fontSize: 13, color: cs.outline),
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(
-                      child: FilledButton.icon(
-                        onPressed: () {
-                          TtsService.I.speak(word);
-                          Navigator.of(ctx).pop();
-                        },
-                        icon: const Icon(
-                          Icons.record_voice_over_rounded,
-                          size: 16,
-                        ),
-                        label: const Text('朗读这个词'),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+                  ),
+                ],
+              ),
             ],
           ),
         ),
-      );
-    },
-  );
+      ),
+    );
+  }
 }
 
 class _TypedContentViewState extends State<TypedContentView> {
@@ -569,7 +713,7 @@ class _TypedContentViewState extends State<TypedContentView> {
 
   /// 播放/停止某一份范文：播放时展开进度条 + KTV 逐句高亮
   /// TTS 朗读按钮：只在"本条"朗读中切换为停止图标（列表里多个按钮互不串扰）；
-  /// 系统无英语语音时禁用并提示用原版录音
+  /// 用微软 Edge 在线神经语音；合成失败（如断网）给出真实原因，而不是"点了没反应"
   Widget _ttsBtn(String text, {String tip = '朗读'}) {
     final available = TtsService.I.available;
     return Column(
@@ -585,29 +729,31 @@ class _TypedContentViewState extends State<TypedContentView> {
                 TtsService.I.speaking.value &&
                 TtsService.I.currentText.value == text;
             return IconButton(
-              tooltip: !available ? '当前系统无英语语音，可用原版录音' : (on ? '停止朗读' : tip),
+              tooltip: on ? '停止朗读' : tip,
               iconSize: 20,
               visualDensity: VisualDensity.compact,
-              // 无语音包时按钮不再"点了没反应"：点一下说明原因 + 给出替代方案
-              onPressed: () {
-                if (!available) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
+              onPressed: () async {
+                final messenger = ScaffoldMessenger.of(context);
+                final ok = await TtsService.I.toggle(text);
+                if (!ok) {
+                  final err = TtsService.I.lastError.value;
+                  messenger.showSnackBar(
+                    SnackBar(
                       content: Text(
-                        '这台设备没有可用的英语语音，无法生成朗读；'
-                        '带原版录音的句子/单词可以直接播放',
+                        err.isEmpty
+                            ? '无法生成朗读：检查网络后重试；'
+                                  '带原版录音的句子/单词可以直接播放'
+                            : '$err；带原版录音的句子/单词可以直接播放',
                       ),
                     ),
                   );
-                  return;
                 }
-                TtsService.I.toggle(text);
               },
               icon: Icon(
-                on ? Icons.stop_circle_rounded : Icons.record_voice_over_rounded,
-                color: available
-                    ? null
-                    : Theme.of(context).colorScheme.outline,
+                on
+                    ? Icons.stop_circle_rounded
+                    : Icons.record_voice_over_rounded,
+                color: available ? null : Theme.of(context).colorScheme.outline,
               ),
             );
           },
@@ -863,10 +1009,7 @@ class _TypedContentViewState extends State<TypedContentView> {
                     theme.textTheme.displaySmall?.copyWith(
                       fontWeight: FontWeight.w600,
                     ) ??
-                    const TextStyle(
-                      fontSize: 32,
-                      fontWeight: FontWeight.w600,
-                    ),
+                    const TextStyle(fontSize: 32, fontWeight: FontWeight.w600),
                 selectable: true,
               ),
             ),
@@ -972,11 +1115,17 @@ class _TypedContentViewState extends State<TypedContentView> {
                       Container(
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .surfaceContainerHighest
-                              .withValues(alpha: 0.5),
-                          borderRadius: BorderRadius.circular(10),
+                          // 嵌套卡用**带主题色的极淡底 + 发丝边**，而不是
+                          // surfaceContainerHighest 的死灰：白卡里再套一层
+                          // 同色系低对比灰块，正是这一页最"糊"的地方
+                          color: StyleTokens.accentOf(context)
+                              .withValues(alpha: 0.06),
+                          borderRadius: AppRadius.cardR,
+                          border: Border.all(
+                            color: StyleTokens.borderOf(
+                              Theme.of(context).brightness,
+                            ).withValues(alpha: 0.7),
+                          ),
                         ),
                         child: EtsTextView(
                           c.translate,
@@ -1030,9 +1179,12 @@ class _TypedContentViewState extends State<TypedContentView> {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surfaceContainerHighest
-                      .withValues(alpha: 0.5),
-                  borderRadius: BorderRadius.circular(10),
+                  color: StyleTokens.accentOf(context).withValues(alpha: 0.06),
+                  borderRadius: AppRadius.cardR,
+                  border: Border.all(
+                    color: StyleTokens.borderOf(Theme.of(context).brightness)
+                        .withValues(alpha: 0.7),
+                  ),
                 ),
                 child: EtsTextView(
                   c.translate,
@@ -1210,9 +1362,12 @@ class _TypedContentViewState extends State<TypedContentView> {
           width: double.infinity,
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surfaceContainerHighest
-                .withValues(alpha: 0.4),
-            borderRadius: BorderRadius.circular(10),
+            color: StyleTokens.accentOf(context).withValues(alpha: 0.06),
+            borderRadius: AppRadius.cardR,
+            border: Border.all(
+              color: StyleTokens.borderOf(Theme.of(context).brightness)
+                  .withValues(alpha: 0.7),
+            ),
           ),
           child: SingleChildScrollView(
             child: Text(
@@ -1284,14 +1439,22 @@ class _QCardState extends State<_QCard> {
   /// 三问问句 TTS（该数据中问句录音为空时的兜底）
   Widget _askTtsBtn(BuildContext context, String text, String tip) {
     final cs = Theme.of(context).colorScheme;
-    final available = TtsService.I.available;
+    final messenger = ScaffoldMessenger.of(context);
     return ValueListenableBuilder<bool>(
       valueListenable: TtsService.I.speaking,
       builder: (context, on, _) => IconButton(
-        tooltip: !available ? '当前系统无英语语音，可用原版录音' : (on ? '停止朗读' : tip),
+        tooltip: on ? '停止朗读' : tip,
         iconSize: 20,
         visualDensity: VisualDensity.compact,
-        onPressed: available ? () => TtsService.I.toggle(text) : null,
+        onPressed: () async {
+          final ok = await TtsService.I.toggle(text);
+          if (!ok) {
+            final err = TtsService.I.lastError.value;
+            messenger.showSnackBar(
+              SnackBar(content: Text(err.isEmpty ? '朗读失败，请检查网络' : err)),
+            );
+          }
+        },
         icon: Icon(
           on ? Icons.stop_circle_rounded : Icons.record_voice_over_rounded,
           color: on ? cs.primary : null,
@@ -1314,8 +1477,11 @@ class _QCardState extends State<_QCard> {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: cs.surfaceContainerHighest.withValues(alpha: 0.35),
-        borderRadius: BorderRadius.circular(14),
+        color: StyleTokens.accentOf(context).withValues(alpha: 0.06),
+        borderRadius: AppRadius.cardR,
+        border: Border.all(
+          color: StyleTokens.borderOf(theme.brightness).withValues(alpha: 0.7),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1697,7 +1863,7 @@ class _SentenceListViewState extends State<SentenceListView> {
                 decoration: BoxDecoration(
                   color: active
                       ? cs.primaryContainer.withValues(alpha: 0.6)
-                      : cs.surfaceContainerHighest.withValues(alpha: 0.3),
+                      : cs.surfaceContainerLowest,
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
                     color: active
@@ -1772,7 +1938,8 @@ class _SentenceListViewState extends State<SentenceListView> {
                             builder: (context, _) {
                               final sp = TtsService.I.speaking.value;
                               final pr = TtsService.I.progress.value;
-                              final mine = TtsService.I.currentText.value == s.text;
+                              final mine =
+                                  TtsService.I.currentText.value == s.text;
                               final active = sp && mine; // 正在读本句
                               final done = !sp && mine && pr >= 1; // 刚读完本句
                               return Row(

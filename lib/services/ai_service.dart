@@ -57,11 +57,376 @@ class AiService {
     return _cacheDir!;
   }
 
-  String _chatUrl(String base) {
+  /// 规范 base：去尾斜杠；已带完整端点路径则原样返回
+  String _normBase(String base, String suffix) {
     var b = base.trim();
     if (b.endsWith('/')) b = b.substring(0, b.length - 1);
-    if (b.endsWith('/chat/completions')) return b;
-    return '$b/chat/completions';
+    if (b.endsWith(suffix)) return b;
+    return '$b$suffix';
+  }
+
+  /// 按协议格式拼请求端点
+  Uri _endpointUrl(AiProvider provider, String fmt, String modelId) {
+    switch (fmt) {
+      case 'openai-responses':
+        return Uri.parse(_normBase(provider.baseUrl, '/responses'));
+      case 'anthropic':
+        return Uri.parse(_normBase(provider.baseUrl, '/messages'));
+      case 'gemini':
+        return Uri.parse(
+          '${_normBase(provider.baseUrl, '/models')}'
+          '/${modelId.trim()}:streamGenerateContent?alt=sse',
+        );
+      default:
+        return Uri.parse(_normBase(provider.baseUrl, '/chat/completions'));
+    }
+  }
+
+  Map<String, String> _endpointHeaders(AiProvider provider, String fmt) {
+    final key = provider.apiKey.trim();
+    switch (fmt) {
+      case 'anthropic':
+        return {
+          'Content-Type': 'application/json',
+          'x-api-key': key,
+          'anthropic-version': '2023-06-01',
+          'Accept': 'text/event-stream',
+        };
+      case 'gemini':
+        return {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': key,
+          'Accept': 'text/event-stream',
+        };
+      default:
+        return {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $key',
+          'Accept': 'text/event-stream',
+        };
+    }
+  }
+
+  /// 从 OpenAI 风格 content 数组里取 data URL 图片（mime + base64）
+  (String, String)? _dataUrlImage(String url) {
+    final m = RegExp(r'^data:image/(\w+);base64,(.+)$').firstMatch(url);
+    if (m == null) return null;
+    final mime = m.group(1) == 'jpg' ? 'jpeg' : (m.group(1) ?? 'png');
+    return (mime, m.group(2) ?? '');
+  }
+
+  /// 按协议格式组装请求体。messages 一律是 OpenAI 风格（调用方约定），
+  /// 这里做各协议的形状转换；返回 null 的键不要放进请求体。
+  Map<String, dynamic> _buildBody({
+    required AiProvider provider,
+    required AiModel model,
+    required String fmt,
+    required List<Map<String, dynamic>> messages,
+    required double temperature,
+    required int maxTokens,
+  }) {
+    final modelId = model.model.trim();
+    // 拆 system：四种协议的 system 都是独立字段（Gemini 的 contents 不收 system）
+    var system = '';
+    final turns = <Map<String, dynamic>>[];
+    for (final m in messages) {
+      if ('${m['role']}' == 'system') {
+        system = '${m['content']}';
+      } else {
+        turns.add(m);
+      }
+    }
+
+    switch (fmt) {
+      case 'openai-responses': {
+        List<dynamic> convContent(dynamic c) {
+          if (c is String) return [{'type': 'input_text', 'text': c}];
+          final out = <dynamic>[];
+          for (final part in (c as List)) {
+            final p = part as Map<String, dynamic>;
+            if (p['type'] == 'text') {
+              out.add({'type': 'input_text', 'text': p['text']});
+            } else if (p['type'] == 'image_url') {
+              out.add({
+                'type': 'input_image',
+                'image_url': (p['image_url'] as Map)['url'],
+              });
+            }
+          }
+          return out;
+        }
+
+        final body = <String, dynamic>{
+          'model': modelId,
+          'instructions': system,
+          'stream': true,
+          'temperature': temperature,
+          'max_output_tokens': maxTokens,
+          'input': [
+            for (final t in turns)
+              {'role': t['role'], 'content': convContent(t['content'])},
+          ],
+        };
+        if (model.thinking) {
+          const effort = {
+            'on': 'medium', 'low': 'low', 'medium': 'medium',
+            'high': 'high', 'ultra': 'high', 'max': 'high',
+          };
+          body['reasoning'] = {
+            'effort': effort[model.thinkingLevel] ?? 'medium',
+          };
+        }
+        return body;
+      }
+      case 'anthropic': {
+        List<dynamic> convContent(dynamic c) {
+          if (c is String) return [{'type': 'text', 'text': c}];
+          final out = <dynamic>[];
+          for (final part in (c as List)) {
+            final p = part as Map<String, dynamic>;
+            if (p['type'] == 'text') {
+              out.add({'type': 'text', 'text': p['text']});
+            } else if (p['type'] == 'image_url') {
+              final img = _dataUrlImage((p['image_url'] as Map)['url'] ?? '');
+              if (img != null) {
+                out.add({
+                  'type': 'image',
+                  'source': {
+                    'type': 'base64',
+                    'media_type': 'image/${img.$1}',
+                    'data': img.$2,
+                  },
+                });
+              }
+            }
+          }
+          return out;
+        }
+
+        final body = <String, dynamic>{
+          'model': modelId,
+          'system': system,
+          'stream': true,
+          'temperature': temperature,
+          'max_tokens': maxTokens,
+          'messages': [
+            for (final t in turns)
+              {'role': t['role'], 'content': convContent(t['content'])},
+          ],
+        };
+        if (model.thinking) {
+          // 思考预算必须 ≥1024 且小于 max_tokens；开思考时 temperature 固定 1
+          final budget = (maxTokens ~/ 2).clamp(1024, 32000);
+          body['max_tokens'] = maxTokens + budget;
+          body['temperature'] = 1;
+          body['thinking'] = {'type': 'enabled', 'budget_tokens': budget};
+        }
+        return body;
+      }
+      case 'gemini': {
+        List<Map<String, dynamic>> convParts(dynamic c) {
+          if (c is String) return [{'text': c}];
+          final out = <Map<String, dynamic>>[];
+          for (final part in (c as List)) {
+            final p = part as Map<String, dynamic>;
+            if (p['type'] == 'text') {
+              out.add({'text': p['text']});
+            } else if (p['type'] == 'image_url') {
+              final img = _dataUrlImage((p['image_url'] as Map)['url'] ?? '');
+              if (img != null) {
+                out.add({
+                  'inline_data': {'mime_type': 'image/${img.$1}', 'data': img.$2},
+                });
+              }
+            }
+          }
+          return out;
+        }
+
+        final body = <String, dynamic>{
+          'contents': [
+            for (final t in turns)
+              {
+                'role': '${t['role']}' == 'assistant' ? 'model' : 'user',
+                'parts': convParts(t['content']),
+              },
+          ],
+          'systemInstruction': {'parts': [{'text': system}]},
+          'generationConfig': {
+            'temperature': temperature,
+            'maxOutputTokens': maxTokens,
+          },
+        };
+        if (model.thinking && model.thinkingLevel == 'on') {
+          // -1 = 动态思考；其余档位不注入（各模型预算上限不同，宁缺毋错）
+          (body['generationConfig'] as Map)['thinkingConfig'] = {
+            'thinkingBudget': -1,
+          };
+        }
+        return body;
+      }
+      default: {
+        final body = <String, dynamic>{
+          'model': modelId,
+          'messages': messages,
+          'stream': true,
+          'temperature': temperature,
+          'max_tokens': maxTokens,
+        };
+        // 思考模式：'开' 不注入 effort，改为请求开启思考输出
+        // （Qwen3/GLM 网关通用参数；不支持的网关会忽略未知字段）；
+        // 低/中/高/超高/最高 注入 reasoning_effort（若接口不支持请关闭思考）
+        // Agnes 模型只会有「开」（档位在配置层锁死）
+        if (model.thinking) {
+          if (model.thinkingLevel == 'on') {
+            body['enable_thinking'] = true;
+          } else {
+            body['reasoning_effort'] = model.thinkingLevel;
+          }
+        }
+        return body;
+      }
+    }
+  }
+
+  /// 解析一条 SSE data。返回 true = 流结束。
+  /// onText / onReason 分别接正文与思考增量（正文会再过 think 标签路由）。
+  bool _sseData(
+    String fmt,
+    String data, {
+    required void Function(String) onText,
+    required void Function(String) onReason,
+  }) {
+    if (fmt == 'openai' && data == '[DONE]') return true;
+    try {
+      final j = jsonDecode(data);
+      switch (fmt) {
+        case 'openai-responses':
+          final type = '${j['type']}';
+          if (type == 'response.output_text.delta') {
+            final d = '${j['delta']}';
+            if (d.isNotEmpty) onText(d);
+          } else if (type == 'response.reasoning_text.delta' ||
+              type == 'response.reasoning_summary_text.delta') {
+            final d = '${j['delta']}';
+            if (d.isNotEmpty) onReason(d);
+          } else if (type == 'response.completed' ||
+              type == 'response.failed' ||
+              type == 'response.incomplete') {
+            return true;
+          }
+        case 'anthropic':
+          final type = '${j['type']}';
+          if (type == 'content_block_delta') {
+            final d = j['delta'] as Map<String, dynamic>?;
+            final dt = '${d?['type']}';
+            if (dt == 'text_delta') {
+              final t = '${d?['text']}';
+              if (t.isNotEmpty) onText(t);
+            } else if (dt == 'thinking_delta') {
+              final t = '${d?['thinking']}';
+              if (t.isNotEmpty) onReason(t);
+            }
+          } else if (type == 'message_stop') {
+            return true;
+          }
+        case 'gemini':
+          final parts =
+              j['candidates']?[0]?['content']?['parts'] as List?;
+          if (parts != null) {
+            for (final part in parts) {
+              final p = part as Map<String, dynamic>;
+              final t = '${p['text'] ?? ''}';
+              if (t.isEmpty) continue;
+              if (p['thought'] == true) {
+                onReason(t);
+              } else {
+                onText(t);
+              }
+            }
+          }
+          final finish = '${j['candidates']?[0]?['finishReason'] ?? ''}';
+          return finish.isNotEmpty && finish != 'null';
+        default:
+          final delta = j['choices']?[0]?['delta'];
+          // 思考内容（DeepSeek 风格 reasoning_content，部分接口叫 reasoning）
+          final rc = delta?['reasoning_content'] ?? delta?['reasoning'];
+          if (rc is String && rc.isNotEmpty) onReason(rc);
+          final deltaContent = delta?['content'];
+          if (deltaContent is String && deltaContent.isNotEmpty) {
+            onText(deltaContent); // 正文里可能混着 <think> 标签
+          }
+      }
+    } catch (_) {}
+    return false;
+  }
+
+  /// 非流式整包 JSON 解析（部分网关不回流）。返回 (正文, 思考)。
+  (String, String) _parseFull(String fmt, dynamic j) {
+    switch (fmt) {
+      case 'openai-responses': {
+        String text = '${j['output_text'] ?? ''}';
+        final reason = StringBuffer();
+        final output = j['output'] as List?;
+        if (output != null) {
+          for (final item in output) {
+            final it = item as Map<String, dynamic>;
+            if ('${it['type']}' == 'reasoning') {
+              for (final s in (it['summary'] as List? ?? const [])) {
+                final t = '${(s as Map)['text'] ?? ''}';
+                if (t.isNotEmpty) reason.write(t);
+              }
+              final dt = '${it['content'] ?? ''}';
+              if (dt.isNotEmpty && dt != 'null') reason.write(dt);
+            } else if (text.isEmpty && '${it['type']}' == 'message') {
+              for (final c in (it['content'] as List? ?? const [])) {
+                final cm = c as Map<String, dynamic>;
+                if ('${cm['type']}' == 'output_text') {
+                  text += '${cm['text'] ?? ''}';
+                }
+              }
+            }
+          }
+        }
+        return (text, reason.toString());
+      }
+      case 'anthropic': {
+        final content = StringBuffer();
+        final reason = StringBuffer();
+        for (final b in (j['content'] as List? ?? const [])) {
+          final bm = b as Map<String, dynamic>;
+          if ('${bm['type']}' == 'text') {
+            content.write('${bm['text'] ?? ''}');
+          } else if ('${bm['type']}' == 'thinking') {
+            reason.write('${bm['thinking'] ?? ''}');
+          }
+        }
+        return (content.toString(), reason.toString());
+      }
+      case 'gemini': {
+        final content = StringBuffer();
+        final reason = StringBuffer();
+        final parts =
+            j['candidates']?[0]?['content']?['parts'] as List?;
+        for (final part in (parts ?? const [])) {
+          final p = part as Map<String, dynamic>;
+          final t = '${p['text'] ?? ''}';
+          if (t.isEmpty) continue;
+          if (p['thought'] == true) {
+            reason.write(t);
+          } else {
+            content.write(t);
+          }
+        }
+        return (content.toString(), reason.toString());
+      }
+      default: {
+        final msg = j['choices']?[0]?['message'];
+        final rc = '${msg?['reasoning_content'] ?? msg?['reasoning'] ?? ''}';
+        var content = '${msg?['content'] ?? ''}';
+        return (content, rc);
+      }
+    }
   }
 
   /// 组装消息：纯文本或（多模态）图文数组
@@ -270,29 +635,24 @@ class AiService {
     required int maxTokens,
     required Duration firstTokenTimeout,
   }) async {
-    final req = http.Request('POST', Uri.parse(_chatUrl(provider.baseUrl)));
-    req.headers['Content-Type'] = 'application/json';
-    req.headers['Authorization'] = 'Bearer ${provider.apiKey.trim()}';
-    req.headers['Accept'] = 'text/event-stream';
-    final body = <String, dynamic>{
-      'model': model.model.trim(),
-      'messages': messages,
-      'stream': true,
-      'temperature': temperature,
-      'max_tokens': maxTokens,
-    };
-    // 思考模式：'开' 不注入 effort，改为请求开启思考输出
-    // （Qwen3/GLM 网关通用参数；不支持的网关会忽略未知字段）；
-    // 低/中/高/超高/最高 注入 reasoning_effort（若接口不支持请关闭思考）
-    // Agnes 模型只会有「开」（档位在配置层锁死）
-    if (model.thinking) {
-      if (model.thinkingLevel == 'on') {
-        body['enable_thinking'] = true;
-      } else {
-        body['reasoning_effort'] = model.thinkingLevel;
-      }
-    }
-    req.body = jsonEncode(body);
+    final fmt = kApiFormats.contains(provider.apiFormat)
+        ? provider.apiFormat
+        : 'openai';
+    final req = http.Request(
+      'POST',
+      _endpointUrl(provider, fmt, model.model),
+    );
+    req.headers.addAll(_endpointHeaders(provider, fmt));
+    req.body = jsonEncode(
+      _buildBody(
+        provider: provider,
+        model: model,
+        fmt: fmt,
+        messages: messages,
+        temperature: temperature,
+        maxTokens: maxTokens,
+      ),
+    );
 
     if (cancel?.isCancelled ?? false) throw AiCancelledException();
 
@@ -326,17 +686,15 @@ class AiService {
     if (contentType.contains('application/json')) {
       final body2 = await resp.stream.bytesToString();
       final j = jsonDecode(body2);
-      final msg = j['choices']?[0]?['message'];
-      final rc = '${msg?['reasoning_content'] ?? msg?['reasoning'] ?? ''}';
-      if (rc.isNotEmpty) onReason?.call(rc);
-      var content = '${msg?['content'] ?? ''}';
+      var (content, rc) = _parseFull(fmt, j);
       // 正文里可能混着 <think> 块：剥离进思考通道
       final m = RegExp(r'^\s*<think>([\s\S]*?)(?:</think>|$)')
           .firstMatch(content);
       if (m != null) {
-        if ((m.group(1) ?? '').isNotEmpty) onReason?.call(m.group(1)!);
+        if ((m.group(1) ?? '').isNotEmpty) rc += m.group(1)!;
         content = content.substring(m.end);
       }
+      if (rc.isNotEmpty) onReason?.call(rc);
       if (content.isNotEmpty) wrappedDelta(content);
       firstTimer.cancel();
       return content;
@@ -472,22 +830,17 @@ class AiService {
             line = line.trim();
             if (!line.startsWith('data:')) return;
             final data = line.substring(5).trim();
-            if (data == '[DONE]') {
-              if (!completer.isCompleted) completer.complete(buf.toString());
-              return;
+            final done = _sseData(
+              fmt,
+              data,
+              onText: routeContent,
+              onReason: reasonOut,
+            );
+            if (data.isNotEmpty && !done) resetIdle();
+            if (done && !completer.isCompleted) {
+              flushTags();
+              completer.complete(buf.toString());
             }
-            try {
-              final j = jsonDecode(data);
-              final delta = j['choices']?[0]?['delta'];
-              // 思考内容（DeepSeek 风格 reasoning_content，部分接口叫 reasoning）
-              final rc = delta?['reasoning_content'] ?? delta?['reasoning'];
-              if (rc is String && rc.isNotEmpty) reasonOut(rc);
-              final deltaContent = delta?['content'];
-              if (deltaContent is String && deltaContent.isNotEmpty) {
-                routeContent(deltaContent); // 正文里可能混着 <think> 标签
-                resetIdle();
-              }
-            } catch (_) {}
           },
           onDone: () {
             flushTags();

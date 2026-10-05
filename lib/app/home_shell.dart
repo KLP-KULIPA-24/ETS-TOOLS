@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart' show launchUrl, LaunchMode;
 
 import '../pages/settings/achievements_page.dart';
+import 'shell_chrome.dart';
 import '../pages/modify/capture_page.dart';
 import '../pages/ai/ai_chat_page.dart';
 import '../pages/homework/homework_page.dart';
@@ -16,6 +17,7 @@ import '../services/settings_service.dart';
 import '../services/update_service.dart';
 import '../widgets/glass.dart';
 import '../widgets/mini_player.dart';
+import '../widgets/style.dart';
 import '../widgets/tour_guide.dart';
 
 /// 自适应外壳
@@ -37,11 +39,18 @@ class _HomeShellState extends State<HomeShell> {
     super.dispose();
   }
 
+  void _switchTab(int i) {
+    // 换页必须退出子界面沉浸态，否则从「新对话」直接点别的标签，
+    // 那个标签页会没有壳层顶栏
+    ShellChrome.exitSubView();
+    setState(() => _index = i);
+  }
+
   void _onTourRequest() {
     final target = TourHub.request.value;
     TourHub.request.value = null;
     if (target == null || !mounted) return;
-    setState(() => _index = target);
+    _switchTab(target);
     // 等目标页 build 完、GlobalKey 挂上再弹蒙层
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Future.delayed(const Duration(milliseconds: 220), () {
@@ -106,12 +115,12 @@ class _HomeShellState extends State<HomeShell> {
   Widget build(BuildContext context) {
     const pages = [
       HomeworkPage(),
-      AiChatPage(),
       CapturePage(),
+      AiChatPage(),
       AchievementsPage(),
       SettingsPage(),
     ];
-    const titles = ['作业', 'AI 对话', '修改', '成就', '设置'];
+    const titles = ['作业', '修改', 'AI 对话', '成就', '设置'];
     final s = context.watch<SettingsService>();
     final autoTablet =
         MediaQuery.sizeOf(context).shortestSide >= 600 && Platform.isAndroid;
@@ -133,22 +142,10 @@ class _HomeShellState extends State<HomeShell> {
         );
 
         // AppBar 画在背景墙内（背景墙全屏覆盖，杜绝顶部黑边）
-        final mobileAppBar = AppBar(
-          backgroundColor: Colors.transparent,
-          title: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _logoBox(26, 8),
-              const SizedBox(width: 8),
-              const Text('E听说助手'),
-              const SizedBox(width: 8),
-              Text(
-                titles[_index],
-                style: Theme.of(context).textTheme.titleSmall
-                    ?.copyWith(color: Theme.of(context).colorScheme.primary),
-              ),
-            ],
-          ),
+        final mobileAppBar = GlassTopBar(
+          logo: _logoBox(28, 9),
+          title: 'E听说助手',
+          subtitle: titles[_index],
           actions: [_helpButton(context)],
         );
 
@@ -159,12 +156,20 @@ class _HomeShellState extends State<HomeShell> {
               GlassWall(
                 child: Column(
                   children: [
+                    // 子界面（如「新对话」）自带顶栏并要占满内容区时，整条收掉，
+                    // 免得两条顶栏叠着、子界面被挤到壳层顶栏下方。状态栏安全区由
+                    // 子界面自己的 GlassScaffold 补。
                     if (!wide)
-                      Padding(
-                        padding: EdgeInsets.only(
-                          top: MediaQuery.paddingOf(context).top,
-                        ),
-                        child: mobileAppBar,
+                      ValueListenableBuilder<bool>(
+                        valueListenable: ShellChrome.immersive,
+                        builder: (context, immersive, _) => immersive
+                            ? const SizedBox.shrink()
+                            : Padding(
+                                padding: EdgeInsets.only(
+                                  top: MediaQuery.paddingOf(context).top,
+                                ),
+                                child: mobileAppBar,
+                              ),
                       ),
                     Expanded(child: body),
                   ],
@@ -183,7 +188,7 @@ class _HomeShellState extends State<HomeShell> {
                       child: _FloatingNavBar(
                         index: _index,
                         armed: armed,
-                        onTap: (i) => setState(() => _index = i),
+                        onTap: _switchTab,
                       ),
                     ),
                   ),
@@ -220,15 +225,15 @@ class _HomeShellState extends State<HomeShell> {
   Widget _buildRail(BuildContext context, bool armed) {
     const dests = [
       (Icons.assignment_outlined, Icons.assignment_rounded, '作业'),
-      (Icons.forum_outlined, Icons.forum_rounded, 'AI 对话'),
       (Icons.tune_outlined, Icons.tune_rounded, '修改'),
+      (Icons.forum_outlined, Icons.forum_rounded, 'AI 对话'),
       (Icons.emoji_events_outlined, Icons.emoji_events_rounded, '成就'),
       (Icons.settings_outlined, Icons.settings_rounded, '设置'),
     ];
     return NavigationRail(
       backgroundColor: Colors.transparent,
       selectedIndex: _index,
-      onDestinationSelected: (i) => setState(() => _index = i),
+      onDestinationSelected: _switchTab,
       labelType: NavigationRailLabelType.all,
       leading: Padding(
         padding: const EdgeInsets.symmetric(vertical: 12),
@@ -285,7 +290,7 @@ class _HomeShellState extends State<HomeShell> {
 }
 
 /// 底部悬浮胶囊（不透明度足够高，避免内容穿透干扰）
-class _FloatingNavBar extends StatelessWidget {
+class _FloatingNavBar extends StatefulWidget {
   final int index;
   final bool armed;
   final ValueChanged<int> onTap;
@@ -296,114 +301,250 @@ class _FloatingNavBar extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final s = context.watch<SettingsService>();
-    final glass = s.styleMode == AppStyle.glass;
-    final dark = Theme.of(context).brightness == Brightness.dark;
-    final items = const [
-      (Icons.assignment_outlined, Icons.assignment_rounded, '作业'),
-      (Icons.forum_outlined, Icons.forum_rounded, 'AI 对话'),
-      (Icons.tune_outlined, Icons.tune_rounded, '修改'),
-      (Icons.emoji_events_outlined, Icons.emoji_events_rounded, '成就'),
-      (Icons.settings_outlined, Icons.settings_rounded, '设置'),
-    ];
+  State<_FloatingNavBar> createState() => _FloatingNavBarState();
+}
 
-    Widget content = Container(
-      height: 62,
-      decoration: BoxDecoration(
-        // iOS 26 悬浮导航：半透玻璃 + 发丝边 + 轻浮起；不再是一块死白
-        color: glass
-            ? (dark
-                  ? const Color(0xFF141A26).withValues(alpha: 0.72)
-                  : Colors.white.withValues(alpha: 0.72))
-            : cs.surfaceContainerHigh,
-        borderRadius: BorderRadius.circular(28),
-        border: glass
-            ? Border.all(
-                color: dark
-                    ? Colors.white.withValues(alpha: 0.14)
-                    : Colors.white.withValues(alpha: 0.9),
-              )
-            : Border.all(color: cs.outlineVariant.withValues(alpha: 0.4)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: dark ? 0.42 : 0.10),
-            blurRadius: 24,
-            offset: const Offset(0, 8),
-            spreadRadius: -6,
-          ),
-        ],
+class _FloatingNavBarState extends State<_FloatingNavBar>
+    with SingleTickerProviderStateMixin {
+  /// 选中胶囊当前的横向位置（像素）。松手时用弹簧动画吸附到最近一格，
+  /// 拖动时**连续跟随手指**——这是 iOS 26 液态标签栏的关键手感。
+  late final AnimationController _spring = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 340),
+  );
+  Animation<double>? _springAnim;
+  double _x = 0;
+  bool _dragging = false;
+  double _itemW = 0;
+
+  static const _items = [
+    (Icons.assignment_outlined, Icons.assignment_rounded, '作业'),
+    (Icons.tune_outlined, Icons.tune_rounded, '修改'),
+    (Icons.forum_outlined, Icons.forum_rounded, 'AI 对话'),
+    (Icons.emoji_events_outlined, Icons.emoji_events_rounded, '成就'),
+    (Icons.settings_outlined, Icons.settings_rounded, '设置'),
+  ];
+
+  @override
+  void dispose() {
+    _spring.dispose();
+    super.dispose();
+  }
+
+  /// 吸附到指定格：短距离用弹簧（带一点点过冲的"液态"感），长距离直接落位
+  void _snapTo(int index) {
+    final target = index * _itemW;
+    _springAnim =
+        Tween<double>(begin: _x, end: target).animate(
+          CurvedAnimation(parent: _spring, curve: Curves.easeOutBack),
+        )..addListener(() {
+          if (mounted) setState(() => _x = _springAnim!.value);
+        });
+    _spring.forward(from: 0);
+  }
+
+  void _onDragUpdate(double dx, double itemW) {
+    _itemW = itemW;
+    setState(() {
+      _x = (_x + dx).clamp(0.0, itemW * (_items.length - 1));
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final w = widget;
+    final b = Theme.of(context).brightness;
+    final dark = b == Brightness.dark;
+    final cs = Theme.of(context).colorScheme;
+    final accent = StyleTokens.accentOf(context);
+    final n = _items.length;
+
+    // 胶囊当前压在第几格上（拖动中由手指位置决定）
+    final hoverIndex = _itemW > 0
+        ? (_x / _itemW).round().clamp(0, n - 1)
+        : w.index;
+
+    return GlassContainer(
+      radius: 28,
+      // 用户反馈导航胶囊"太透明模糊"：底色收到近实体，色斑只微微透上来，
+      // 保证图标文字在任何背景段上都读得清
+      color: dark
+          ? const Color(0xFF141A26).withValues(alpha: 0.62)
+          : Colors.white.withValues(alpha: 0.72),
+      border: Border.all(
+        color: dark
+            ? Colors.white.withValues(alpha: 0.14)
+            : StyleTokens.borderOf(b).withValues(alpha: 0.9),
       ),
-      child: Row(
-        children: [
-          for (var i = 0; i < items.length; i++)
-            Expanded(
-              // InkWell 涟漪：按下时立刻显示命中位置（整列热区），
-              // 若涟漪与手指错位说明是系统触摸映射而非控件问题
-              child: InkWell(
-                onTap: () => onTap(i),
-                splashColor: cs.primary.withValues(alpha: 0.16),
-                highlightColor: Colors.transparent,
-                child: Container(
-                  height: 62,
-                  margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 7),
-                  decoration: index == i
-                      ? BoxDecoration(
-                          color: cs.primary.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(999),
-                        )
-                      : null,
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      if (armed)
-                        _Jitter(
-                          phase: i * 0.8,
-                          child: Icon(
-                            index == i ? items[i].$2 : items[i].$1,
-                            size: 21,
-                            color: index == i
-                                ? cs.primary
-                                : cs.onSurfaceVariant,
-                          ),
-                        )
-                      else
-                        Icon(
-                          index == i ? items[i].$2 : items[i].$1,
-                          size: 21,
-                          color: index == i ? cs.primary : cs.onSurfaceVariant,
+      child: LayoutBuilder(
+        builder: (context, box) {
+          final itemW = box.maxWidth / n;
+          _itemW = itemW;
+          if (!_dragging && !_spring.isAnimating) {
+            // 非拖拽态跟住外部 index（点击切换时由父级改 index）
+            _x = w.index * itemW;
+          }
+          return GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onHorizontalDragStart: (_) => setState(() => _dragging = true),
+            onHorizontalDragUpdate: (d) => _onDragUpdate(d.delta.dx, itemW),
+            onHorizontalDragEnd: (_) => _endDrag(),
+            onHorizontalDragCancel: () {
+              setState(() => _dragging = false);
+              _snapTo(w.index);
+            },
+            // 轻点：胶囊直接弹到点中的那一格
+            onTapDown: (d) => _tapDown = d.localPosition.dx,
+            onTap: () {
+              if (_itemW <= 0) return;
+              final i = (_tapDown / _itemW).floor().clamp(0, n - 1);
+              w.onTap(i);
+              _snapTo(i);
+            },
+            child: SizedBox(
+              height: 62,
+              child: Stack(
+                children: [
+                  // 唯一的选中胶囊：在 Row 之下、随手指连续移动。
+                  // 参考苹果液态玻璃：胶囊本身是磨砂玻璃（模糊 + 顶缘高光 + 细边），
+                  // 不是实色块；选中项内容用主题色（像 Home 的红字）。
+                  Positioned(
+                    left: _x + 4,
+                    top: 7,
+                    bottom: 7,
+                    width: itemW - 8,
+                    child: ClipRRect(
+                      borderRadius: AppRadius.capsule,
+                      child: BackdropFilter(
+                        filter: ImageFilter.compose(
+                          outer: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                          inner: saturate(dark ? 1.5 : 1.7),
                         ),
-                      const SizedBox(height: 2),
-                      Text(
-                        items[i].$3,
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: index == i
-                              ? FontWeight.w600
-                              : FontWeight.w600,
-                          color: index == i ? cs.primary : cs.onSurfaceVariant,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            borderRadius: AppRadius.capsule,
+                            color: dark
+                                ? Colors.white.withValues(alpha: 0.10)
+                                : Colors.white.withValues(alpha: 0.44),
+                            border: Border.all(
+                              width: 1,
+                              color: dark
+                                  ? Colors.white.withValues(alpha: 0.20)
+                                  : Colors.white.withValues(alpha: 0.70),
+                            ),
+                            // 顶缘内高光：玻璃"边"的收口（inset 0 1px 0 white）
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [
+                                Colors.white.withValues(
+                                  alpha: dark ? 0.30 : 0.75,
+                                ),
+                                Colors.white.withValues(alpha: 0.0),
+                              ],
+                              stops: const [0, 0.30],
+                            ),
+                          ),
                         ),
                       ),
+                    ),
+                  ),
+                  Row(
+                    children: [
+                      for (var i = 0; i < n; i++)
+                        Expanded(
+                          child: _NavItem(
+                            icon: hoverIndex == i ? _items[i].$2 : _items[i].$1,
+                            label: _items[i].$3,
+                            // 胶囊拖动时会同时压住两格：只要被压住就点亮。
+                            // 内容色"提取反色"：玻璃偏亮 → 主题色（深），
+                            // 玻璃偏暗 → 提亮的主题色，保证对比度
+                            active: _lit(i, itemW),
+                            onPrimary: dark
+                                ? Color.alphaBlend(
+                                    Colors.white.withValues(alpha: 0.30),
+                                    accent,
+                                  )
+                                : accent,
+                            idle: dark ? cs.onSurfaceVariant : cs.onSurfaceVariant,
+                            jitter: w.armed ? i * 0.8 : null,
+                          ),
+                        ),
                     ],
                   ),
-                ),
+                ],
               ),
             ),
-        ],
+          );
+        },
       ),
     );
+  }
 
-    if (glass) {
-      content = ClipRRect(
-        borderRadius: BorderRadius.circular(22),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-          child: content,
-        ),
-      );
+  double _tapDown = 0;
+
+  /// 第 i 格是否被选中胶囊压住（压住 = 重叠超过格宽 1/4）。
+  /// 胶囊在两格中间时两格同时成立——两格都亮白字。
+  bool _lit(int i, double itemW) {
+    if (itemW <= 0) return i == widget.index;
+    final pillL = _x + 4;
+    final pillR = _x + itemW - 4;
+    final itemL = i * itemW;
+    final itemR = (i + 1) * itemW;
+    final overlap = min(pillR, itemR) - max(pillL, itemL);
+    return overlap > itemW * 0.25;
+  }
+
+  void _endDrag() {
+    if (_itemW <= 0) {
+      setState(() => _dragging = false);
+      return;
     }
-    return content;
+    final target = (_x / _itemW).round().clamp(0, _items.length - 1);
+    setState(() => _dragging = false);
+    if (target != widget.index) widget.onTap(target);
+    _snapTo(target);
+  }
+}
+
+/// 导航项内容（胶囊由外层 Stack 统一绘制，这里只负责图标+文字的取色）
+class _NavItem extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool active;
+  final Color onPrimary;
+  final Color idle;
+  final double? jitter; // 氛围模式下让图标抖动
+
+  const _NavItem({
+    required this.icon,
+    required this.label,
+    required this.active,
+    required this.onPrimary,
+    required this.idle,
+    this.jitter,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final fg = active ? onPrimary : idle;
+    Widget col = Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(icon, size: 21, color: fg),
+        const SizedBox(height: 2),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: AppText.xs,
+            fontWeight: active ? AppText.wBold : AppText.wMedium,
+            color: fg,
+          ),
+        ),
+      ],
+    );
+    if (jitter != null) col = _Jitter(phase: jitter!, child: col);
+    return col;
   }
 }
 
