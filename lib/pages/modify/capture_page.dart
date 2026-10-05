@@ -437,7 +437,10 @@ class _CapturePageState extends State<CapturePage> {
                 valueListenable: CaptureEngine.I.status,
                 builder: (_, s, _) => FilterChip(
                   selected: proxySet,
-                  label: Text(proxySet ? '已接管' : '设置代理'),
+                  label: Text(
+                    proxySet ? '已接管' : '设置代理',
+                    style: TextStyle(color: proxySet ? Colors.white : null),
+                  ),
                   onSelected: (_) => proxySet ? _restoreProxy() : _setProxy(),
                 ),
               ),
@@ -512,7 +515,10 @@ class _CapturePageState extends State<CapturePage> {
             children: [
               FilterChip(
                 selected: advanced,
-                label: const Text('高级模式'),
+                label: Text(
+                  '高级模式',
+                  style: TextStyle(color: advanced ? Colors.white : null),
+                ),
                 onSelected: (v) {
                   context.read<SettingsService>().setCaptureAdvanced(on: v);
                   setState(() {});

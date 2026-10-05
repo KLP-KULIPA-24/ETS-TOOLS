@@ -414,7 +414,10 @@ class _FloatingNavBarState extends State<_FloatingNavBar>
                     bottom: 7,
                     width: itemW - 8,
                     child: ClipRRect(
-                      borderRadius: AppRadius.capsule,
+                      // 注意：不能用 AppRadius.capsule（999）——ClipRRect 不像
+                      // drawRRect 会自动缩半径，999 套在 48 高的胶囊上裁剪路径
+                      // 直接退化，整个填充层都画不出来。48 高全圆 = 24。
+                      borderRadius: BorderRadius.circular(24),
                       child: BackdropFilter(
                         filter: ImageFilter.compose(
                           outer: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
@@ -422,27 +425,30 @@ class _FloatingNavBarState extends State<_FloatingNavBar>
                         ),
                         child: DecoratedBox(
                           decoration: BoxDecoration(
-                            borderRadius: AppRadius.capsule,
+                            borderRadius: BorderRadius.circular(24),
+                            // 选中胶囊垫一层灰：白玻璃上再叠白胶囊看不出选中，
+                            // 灰底才"托"得住主题色内容（用户反馈：效果不够明显）
                             color: dark
-                                ? Colors.white.withValues(alpha: 0.10)
-                                : Colors.white.withValues(alpha: 0.44),
+                                ? Colors.white.withValues(alpha: 0.14)
+                                : cs.onSurface.withValues(alpha: 0.10),
                             border: Border.all(
                               width: 1,
                               color: dark
-                                  ? Colors.white.withValues(alpha: 0.20)
-                                  : Colors.white.withValues(alpha: 0.70),
+                                  ? Colors.white.withValues(alpha: 0.22)
+                                  : cs.onSurface.withValues(alpha: 0.12),
                             ),
-                            // 顶缘内高光：玻璃"边"的收口（inset 0 1px 0 white）
+                            // 顶缘高光只留一丝：高了会把灰底整个洗白，
+                            // 选中态又看不见了
                             gradient: LinearGradient(
                               begin: Alignment.topCenter,
                               end: Alignment.bottomCenter,
                               colors: [
                                 Colors.white.withValues(
-                                  alpha: dark ? 0.30 : 0.75,
+                                  alpha: dark ? 0.18 : 0.35,
                                 ),
                                 Colors.white.withValues(alpha: 0.0),
                               ],
-                              stops: const [0, 0.30],
+                              stops: const [0, 0.14],
                             ),
                           ),
                         ),

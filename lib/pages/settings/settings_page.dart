@@ -1307,7 +1307,11 @@ class _AiSectionState extends State<_AiSection> {
                       selected: ms[i].thinking,
                       label: Text(
                         '思考${ms[i].thinking ? '·${kThinkingLevelLabels[ms[i].thinkingLevel] ?? ms[i].thinkingLevel}' : ''}',
-                        style: const TextStyle(fontSize: 12),
+                        // 选中=实色主题色底，文字必须白；未选中给深色
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: ms[i].thinking ? Colors.white : null,
+                        ),
                       ),
                       onSelected: (v) =>
                           s.updateModel(ms[i].copyWith(thinking: v)),
@@ -1335,14 +1339,28 @@ class _AiSectionState extends State<_AiSection> {
                           label: Text(
                             kThinkingLevelLabels[ms[i].thinkingLevel] ??
                                 ms[i].thinkingLevel,
-                            style: const TextStyle(fontSize: 12),
+                            // M3 默认会把 chip 标签解析成 onSurfaceVariant（灰），
+                            // 灰字叠浅灰底没对比度（用户反馈"应该是黑色"）
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: StyleTokens.textOf(
+                                Theme.of(context).brightness,
+                              ),
+                            ),
                           ),
                         ),
                       ),
                     FilterChip(
                       visualDensity: VisualDensity.compact,
                       selected: ms[i].multimodal,
-                      label: const Text('多模态', style: TextStyle(fontSize: 12)),
+                      label: Text(
+                        '多模态',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: ms[i].multimodal ? Colors.white : null,
+                        ),
+                      ),
                       onSelected: (v) =>
                           s.updateModel(ms[i].copyWith(multimodal: v)),
                     ),
@@ -1798,13 +1816,21 @@ class _AiSectionState extends State<_AiSection> {
                     children: [
                       FilterChip(
                         selected: thinking,
-                        label: const Text('思考'),
+                        label: Text(
+                          '思考',
+                          style: TextStyle(color: thinking ? Colors.white : null),
+                        ),
                         onSelected: (v) => setDialog(() => thinking = v),
                       ),
                       const Spacer(),
                       FilterChip(
                         selected: multimodal,
-                        label: const Text('多模态'),
+                        label: Text(
+                          '多模态',
+                          style: TextStyle(
+                            color: multimodal ? Colors.white : null,
+                          ),
+                        ),
                         onSelected: (v) => setDialog(() => multimodal = v),
                       ),
                     ],
@@ -1994,13 +2020,21 @@ class _AiSectionState extends State<_AiSection> {
                     children: [
                       FilterChip(
                         selected: thinking,
-                        label: const Text('思考'),
+                        label: Text(
+                          '思考',
+                          style: TextStyle(color: thinking ? Colors.white : null),
+                        ),
                         onSelected: (v) => setDialog(() => thinking = v),
                       ),
                       const Spacer(),
                       FilterChip(
                         selected: multimodal,
-                        label: const Text('多模态'),
+                        label: Text(
+                          '多模态',
+                          style: TextStyle(
+                            color: multimodal ? Colors.white : null,
+                          ),
+                        ),
                         onSelected: (v) => setDialog(() => multimodal = v),
                       ),
                     ],

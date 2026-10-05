@@ -677,6 +677,10 @@ class EtsHelperApp extends StatelessWidget {
         checkmarkColor: Colors.white,
         side: BorderSide.none,
         shape: const StadiumBorder(),
+        // 选中态文字：FilterChip/ChoiceChip 的 M3 默认会解析成
+        // onSecondaryContainer（深色），压在实色主题色上读不清——各 FilterChip
+        // 的 label 已按 selected 显式给白。这里保持普通深色样式即可，
+        // 不要用 MaterialStateTextStyle（会让未选中 chip 的文字被解析成白色）。
         labelStyle: TextStyle(
           fontSize: AppText.sm,
           fontWeight: AppText.wMedium,

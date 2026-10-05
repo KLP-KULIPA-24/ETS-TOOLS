@@ -156,14 +156,6 @@ class _ContentDetailPageState extends State<ContentDetailPage> {
                   : Icons.visibility_outlined,
             ),
           ),
-          // 悬浮窗（仅 Android 系统悬浮球；Windows 已下线该功能）
-          if (Platform.isAndroid)
-            IconButton(
-              key: _kFloating,
-              tooltip: '悬浮窗展示答案',
-              onPressed: () => _showFloating(),
-              icon: const Icon(Icons.picture_in_picture_alt_rounded),
-            ),
           // 模拟考场
           PopupMenuButton<String>(
             key: _kMore,
@@ -189,6 +181,15 @@ class _ContentDetailPageState extends State<ContentDetailPage> {
               ),
             ],
           ),
+          // 悬浮窗（仅 Android 系统悬浮球；Windows 已下线该功能）
+          // 用户指定位置：右上角，紧挨「本页说明」按钮左侧
+          if (Platform.isAndroid)
+            IconButton(
+              key: _kFloating,
+              tooltip: '悬浮窗展示答案',
+              onPressed: () => _showFloating(),
+              icon: const Icon(Icons.picture_in_picture_alt_rounded),
+            ),
           IconButton(
             tooltip: '本页说明',
             icon: const Icon(Icons.help_outline_rounded),
