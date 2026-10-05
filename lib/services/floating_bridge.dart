@@ -1,10 +1,11 @@
 /// 悬浮窗数据桥（内存 + 持久化双通道）
-/// Windows 悬浮模式：内存传递；Android 悬浮窗：SharedPreferences 跨 engine
+/// Windows 悬浮模式：内存传递；Android 悬浮窗：原生 WindowManager 视图
+/// （MainActivity 的 FloatingBall，走 eets/shell 通道）
 library;
 
 import 'dart:convert';
 
-import 'package:flutter_overlay_window/flutter_overlay_window.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:flutter/foundation.dart';
@@ -12,6 +13,8 @@ import 'package:flutter/foundation.dart';
 import 'achievements.dart';
 
 class FloatingBridge {
+  static const _channel = MethodChannel('eets/shell');
+
   static final ValueNotifier<bool> inFloating = ValueNotifier(false);
   static String title = '';
   static String answers = '';
@@ -53,40 +56,16 @@ class FloatingBridge {
     }
   }
 
-  /// 请求 Android 悬浮窗权限并显示（折叠圆形）
-  /// 某些 ROM（含模拟器）在已授权时 isPermissionGranted 仍误报 false——
-  /// 因此先探测/直启悬浮窗，失败才走系统授权页，避免"已允许却反复跳设置"。
+  /// 显示 Android 悬浮窗（原生 WindowManager 小球）。
+  /// 未授权时原生侧直接拉起系统"显示在其他应用上层"设置页，这里返回 false。
   static Future<bool> showAndroidOverlay() async {
     Achievements.unlock('floating');
     try {
-      if (await FlutterOverlayWindow.isActive()) return true;
-      try {
-        await FlutterOverlayWindow.showOverlay(
-          height: 148,
-          width: 148,
-          alignment: OverlayAlignment.center,
-          flag: OverlayFlag.focusPointer,
-          enableDrag: true,
-          positionGravity: PositionGravity.none,
-        );
-        return true;
-      } catch (_) {
-        // 直启失败：多为未授权，走一次系统授权流程
-        final granted = await FlutterOverlayWindow.isPermissionGranted();
-        if (granted != true) {
-          final ok = await FlutterOverlayWindow.requestPermission();
-          if (ok != true) return false;
-        }
-        await FlutterOverlayWindow.showOverlay(
-          height: 148,
-          width: 148,
-          alignment: OverlayAlignment.center,
-          flag: OverlayFlag.focusPointer,
-          enableDrag: true,
-          positionGravity: PositionGravity.none,
-        );
-        return true;
-      }
+      final r = await _channel.invokeMethod<String>('floatingShow', {
+        'title': title,
+        'answers': answers,
+      });
+      return r == 'ok';
     } catch (e) {
       assert(() {
         debugPrint('[FloatingBridge] showAndroidOverlay failed: $e');
@@ -96,9 +75,19 @@ class FloatingBridge {
     }
   }
 
+  /// 悬浮窗已显示时，用最新数据刷新内容（详情页打开新作业时调用）
+  static Future<void> updateAndroidOverlay() async {
+    try {
+      await _channel.invokeMethod<String>('floatingUpdate', {
+        'title': title,
+        'answers': answers,
+      });
+    } catch (_) {}
+  }
+
   static Future<void> hideAndroidOverlay() async {
     try {
-      await FlutterOverlayWindow.closeOverlay();
+      await _channel.invokeMethod<String>('floatingHide');
     } catch (_) {}
   }
 
@@ -106,7 +95,9 @@ class FloatingBridge {
   /// 返回 true = 切换后是显示态。
   static Future<bool> toggleAndroidOverlay() async {
     try {
-      if (await FlutterOverlayWindow.isActive()) {
+      final active =
+          await _channel.invokeMethod<bool>('floatingActive') ?? false;
+      if (active) {
         await hideAndroidOverlay();
         return false;
       }

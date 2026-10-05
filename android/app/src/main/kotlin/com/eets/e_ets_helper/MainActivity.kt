@@ -41,6 +41,7 @@ class MainActivity : FlutterActivity() {
     }
 
     private var pendingSafResult: MethodChannel.Result? = null
+    private val floating by lazy { FloatingBall(this) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -80,6 +81,37 @@ class MainActivity : FlutterActivity() {
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
             .setMethodCallHandler { call, result ->
                 when (call.method) {
+                    // ---- 原生悬浮窗（可拖动的小球，点开展开答案卡）----
+                    "floatingShow" -> {
+                        val title = call.argument<String>("title") ?: ""
+                        val answers = call.argument<String>("answers") ?: ""
+                        runOnUiThread {
+                            if (!floating.hasPermission()) {
+                                // 未授权：直接拉起系统"显示在其他应用上层"设置页
+                                floating.openPermissionSettings()
+                                result.success("noPermission")
+                            } else {
+                                result.success(if (floating.show(title, answers)) "ok" else "failed")
+                            }
+                        }
+                    }
+                    "floatingUpdate" -> {
+                        val title = call.argument<String>("title") ?: ""
+                        val answers = call.argument<String>("answers") ?: ""
+                        runOnUiThread {
+                            floating.update(title, answers)
+                            result.success("ok")
+                        }
+                    }
+                    "floatingHide" -> {
+                        runOnUiThread {
+                            floating.hide()
+                            result.success("ok")
+                        }
+                    }
+                    "floatingActive" -> {
+                        result.success(floating.isShowing)
+                    }
                     "probe" -> {
                         Thread {
                             val map = HashMap<String, Any>()

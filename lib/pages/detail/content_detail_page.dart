@@ -1,4 +1,6 @@
 
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import '../../models/ets_models.dart';
@@ -35,12 +37,15 @@ class _ContentDetailPageState extends State<ContentDetailPage> {
   void initState() {
     super.initState();
     // 悬浮窗按钮在壳层顶栏（全局），详情页只负责把当前作业的
-    // 答案同步进数据桥——顶栏按钮一按，悬浮球展示的就是这份内容
+    // 答案同步进数据桥——顶栏按钮一按，悬浮球展示的就是这份内容；
+    // 悬浮球已开着时同步刷新显示内容
     FloatingBridge.set(
       title: widget.entry.title,
       answers: _plainAnswers,
       stid: widget.entry.content?.stid ?? widget.entry.paper?.tzid ?? '',
-    );
+    ).then((_) {
+      if (Platform.isAndroid) FloatingBridge.updateAndroidOverlay();
+    });
     final stid = widget.entry.content?.stid;
     if (stid != null) {
       for (final a in AiAction.values) {

@@ -25,6 +25,10 @@ class AudioPlayerService extends ChangeNotifier {
   double? _segTo;
   String currentSource = '';
 
+  /// 谁点的播放（行内按钮实例 id）。同一份录音被多道题引用时，
+  /// 靠 source 判断高亮会全部一起亮（用户反馈"没点的按钮也变了"）
+  int? activeOwner;
+
   bool get playing => player.playing;
   double get speed => player.speed;
   Duration get position => player.position;
@@ -54,15 +58,18 @@ class AudioPlayerService extends ChangeNotifier {
     });
   }
 
-  /// 打开本地文件或 URL
+  /// 打开本地文件或 URL。[owner] 标记发起者（行内按钮实例），
+  /// 高亮只认 activeOwner —— 多题共用同一份录音时不会全亮
   Future<void> open(
     String source, {
     bool autoPlay = true,
     double? from,
     double? to,
+    int? owner,
   }) async {
     // 互斥：切源播放前停掉 TTS
     unawaited(TtsService.I.stop());
+    activeOwner = owner;
     if (source == currentSource && player.audioSource != null) {
       await player.seek(Duration(milliseconds: ((from ?? 0) * 1000).round()));
       if (autoPlay) await player.play();
@@ -101,6 +108,7 @@ class AudioPlayerService extends ChangeNotifier {
   Future<void> stop() async {
     await player.stop();
     currentSource = '';
+    activeOwner = null;
     _clearLoop();
     notifyListeners();
   }

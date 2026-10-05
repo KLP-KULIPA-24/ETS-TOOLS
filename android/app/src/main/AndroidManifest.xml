@@ -40,11 +40,8 @@
             android:name="flutterEmbedding"
             android:value="2" />
 
-        <!-- 悬浮窗服务（flutter_overlay_window）：缺失时点悬浮窗按钮
-             日志报 "OverlayService not found"，悬浮球永远弹不出来 -->
-        <service
-            android:name="flutter.overlay.window.flutter_overlay_window.OverlayService"
-            android:exported="false" />
+        <!-- 悬浮窗改用原生 WindowManager 实现（FloatingBall.kt），
+             不再需要 flutter_overlay_window 的 OverlayService。 -->
 
         <!-- 关掉 Impeller：media_kit 的视频纹理在 Impeller 下会出现整片色偏
              （画面泛红），改回 Skia/OpenGL 渲染。 -->

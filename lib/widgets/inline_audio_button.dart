@@ -23,6 +23,10 @@ class InlineAudioButton extends StatefulWidget {
 }
 
 class _InlineAudioButtonState extends State<InlineAudioButton> {
+  static int _seq = 0;
+  // 实例身份：同一份录音被多道题引用时，只有发起播放的那个按钮高亮
+  late final int _owner = ++_seq;
+
   static String _hms(Duration d) {
     final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
     final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
@@ -40,7 +44,7 @@ class _InlineAudioButtonState extends State<InlineAudioButton> {
     return ListenableBuilder(
       listenable: ps,
       builder: (context, _) {
-        final active = ps.currentSource == widget.source;
+        final active = ps.activeOwner == _owner;
         final btn = IconButton(
           tooltip: widget.tip,
           visualDensity: VisualDensity.compact,
@@ -48,7 +52,7 @@ class _InlineAudioButtonState extends State<InlineAudioButton> {
           constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
           onPressed: () {
             if (!active) {
-              ps.open(widget.source);
+              ps.open(widget.source, owner: _owner);
             } else {
               ps.toggle();
             }
