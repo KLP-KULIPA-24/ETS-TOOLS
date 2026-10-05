@@ -21,11 +21,11 @@ import android.widget.TextView
 import kotlin.math.abs
 
 /**
- * 原生悬浮窗（可拖动的小球，点开展开答案卡）。
+ * 原生悬浮窗：折叠态是一个软件图标的圆形小球，点开展开答案卡，可拖动。
  *
  * 为什么不用 flutter_overlay_window：那个插件在部分 ROM/新版引擎上悬浮层
  * 起不来——日志里是 `FlutterRenderer: Width is zero`，窗口建出来了但内容
- * 是黑的/看不见（用户反馈"点了没反应"，且会弄乱界面）。原生 WindowManager
+ * 是黑的/看不见（用户反馈"点了没反应"，还会把界面搞乱）。原生 WindowManager
  * 视图不依赖第二个 Flutter 引擎，稳定可控。
  */
 class FloatingBall(private val context: Context) {
@@ -37,7 +37,15 @@ class FloatingBall(private val context: Context) {
     private var params: WindowManager.LayoutParams? = null
     private var titleView: TextView? = null
     private var bodyView: TextView? = null
+    private var ballView: View? = null
+    private var expandedBox: LinearLayout? = null
     private var expanded = false
+
+    /** 球直径（dp，设置页滑杆可调 60~160）与不透明度 */
+    private var ballSizeDp = 80
+    private var opacity = 0.96f
+
+    private fun expandedWidthDp(): Int = (ballSizeDp * 3).coerceIn(220, 420)
 
     private var downRawX = 0f
     private var downRawY = 0f
@@ -74,27 +82,51 @@ class FloatingBall(private val context: Context) {
             WindowManager.LayoutParams.TYPE_PHONE
         }
 
+    private fun dp(v: Int): Int = (v * context.resources.displayMetrics.density).toInt()
+
+    /**
+     * 用 mipmap 的 PNG 图标（不是自适应图标）：
+     * 自适应图标会按系统形状遮罩渲染，套进圆形底里会被裁掉一截（用户反馈
+     * "图标都没展示完全"）。PNG + FIT_CENTER 能完整显示。
+     */
+    private fun appIconRes(): Int = R.mipmap.ic_launcher
+
     @SuppressLint("ClickableViewAccessibility")
     private fun buildCard(title: String, answers: String): LinearLayout {
-        val pad = (14 * context.resources.displayMetrics.density).toInt()
+        val pad = dp(14)
         val card = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
-            background = GradientDrawable().apply {
-                cornerRadius = pad * 1.6f
-                setColor(Color.argb(246, 255, 255, 255))
-                setStroke((1 * context.resources.displayMetrics.density).toInt(), Color.argb(40, 20, 24, 40))
-            }
-            elevation = pad * 0.6f
+            elevation = dp(8).toFloat()
+            setPadding(pad, pad, pad, pad)
         }
 
-        // 顶栏：应用图标 + 标题（折叠态只有这一行）
+        // ---- 折叠态：只留软件图标的圆形小球 ----
+        val ball = ImageView(context).apply {
+            setImageResource(appIconRes())
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            contentDescription = "E听说助手悬浮窗"
+        }
+        ballView = ball
+        // 图标取球的 ~58%：图标本身是圆角方块，太大会顶出圆壳
+        card.addView(
+            ball,
+            LinearLayout.LayoutParams(
+                dp((ballSizeDp * 0.58f).toInt()),
+                dp((ballSizeDp * 0.58f).toInt()),
+            ),
+        )
+
+        // ---- 展开态：图标 + 标题 + 正文 ----
+        val box = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+        }
         val head = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
         val icon = ImageView(context).apply {
-            setImageResource(android.R.drawable.ic_menu_view)
-            setColorFilter(Color.argb(235, 31, 58, 140))
+            setImageResource(appIconRes())
+            scaleType = ImageView.ScaleType.FIT_CENTER
         }
         head.addView(icon, LinearLayout.LayoutParams(dp(20), dp(20)))
         val t = TextView(context).apply {
@@ -106,14 +138,9 @@ class FloatingBall(private val context: Context) {
         }
         head.addView(t, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
             leftMargin = dp(8)
-            rightMargin = dp(4)
         })
-        card.addView(head, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.WRAP_CONTENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT,
-        ))
+        box.addView(head)
 
-        // 正文（展开才显示）
         val scroll = ScrollView(context).apply {
             isVerticalScrollBarEnabled = false
         }
@@ -130,12 +157,15 @@ class FloatingBall(private val context: Context) {
                 LinearLayout.LayoutParams.WRAP_CONTENT,
             ),
         )
-        card.addView(scroll, LinearLayout.LayoutParams(
+        box.addView(scroll, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
             dp(190),
         ).apply { topMargin = dp(8) })
-        card.setPadding(pad, pad, pad, pad)
-
+        card.addView(box, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+        ))
+        expandedBox = box
         titleView = t
         bodyView = body
 
@@ -178,16 +208,42 @@ class FloatingBall(private val context: Context) {
     }
 
     private fun applyExpanded() {
-        val body = bodyView ?: return
-        body.visibility = if (expanded) View.VISIBLE else View.GONE
-        (body.parent as? View)?.visibility = if (expanded) View.VISIBLE else View.GONE
+        val c = card ?: return
+        ballView?.visibility = if (expanded) View.GONE else View.VISIBLE
+        expandedBox?.visibility = if (expanded) View.VISIBLE else View.GONE
+        c.alpha = opacity
+        // 外壳统一在这里画：折叠=正圆（球），展开=圆角卡片。
+        // 之前把外壳分散在 applyStyle 里画，调完尺寸就丢——这里单一来源。
+        c.background = if (expanded) {
+            GradientDrawable().apply {
+                cornerRadius = dp(24).toFloat()
+                setColor(Color.argb((246 * opacity).toInt(), 255, 255, 255))
+                setStroke(dp(1), Color.argb((40 * opacity).toInt(), 20, 24, 40))
+            }
+        } else {
+            GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(Color.argb((250 * opacity).toInt(), 255, 255, 255))
+                setStroke(dp(1), Color.argb((46 * opacity).toInt(), 20, 24, 40))
+            }
+        }
+        val pad = if (expanded) dp(14) else dp(5)
+        c.setPadding(pad, pad, pad, pad)
+        // 折叠态要居中（竖向 LinearLayout 默认靠左上，球会偏出去）
+        c.gravity = if (expanded) Gravity.START else Gravity.CENTER
+        ballView?.let { b ->
+            val s = dp((ballSizeDp * 0.58f).toInt())
+            b.layoutParams = LinearLayout.LayoutParams(s, s)
+        }
         params?.let { p ->
-            p.width = if (expanded) dp(280) else dp(150)
-            card?.let { c -> wm.updateViewLayout(c, p) }
+            p.width = if (expanded) dp(expandedWidthDp()) else dp(ballSizeDp)
+            p.height = if (expanded) LinearLayout.LayoutParams.WRAP_CONTENT else dp(ballSizeDp)
+            try {
+                wm.updateViewLayout(c, p)
+            } catch (_: Throwable) {
+            }
         }
     }
-
-    private fun dp(v: Int): Int = (v * context.resources.displayMetrics.density).toInt()
 
     @Synchronized
     fun show(title: String, answers: String): Boolean {
@@ -197,8 +253,8 @@ class FloatingBall(private val context: Context) {
             return true
         }
         val p = WindowManager.LayoutParams(
-            dp(150),
-            WindowManager.LayoutParams.WRAP_CONTENT,
+            dp(ballSizeDp),
+            dp(ballSizeDp),
             overlayType(),
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                 WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
@@ -227,6 +283,16 @@ class FloatingBall(private val context: Context) {
         bodyView?.text = answers.ifBlank { "（暂无内容）" }
     }
 
+    /** 设置页调整外观：球直径(**屏幕像素**) + 不透明度 */
+    @Synchronized
+    fun applyStyle(sizePx: Int, opacityValue: Double) {
+        val density = context.resources.displayMetrics.density.coerceAtLeast(0.75f)
+        ballSizeDp = (sizePx / density).toInt().coerceIn(28, 260)
+        opacity = opacityValue.toFloat().coerceIn(0.4f, 1f)
+        if (card == null) return
+        applyExpanded()
+    }
+
     @Synchronized
     fun hide() {
         card?.let { c ->
@@ -238,5 +304,7 @@ class FloatingBall(private val context: Context) {
         card = null
         params = null
         expanded = false
+        ballView = null
+        expandedBox = null
     }
 }

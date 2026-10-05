@@ -199,7 +199,9 @@ class _AiChatPageState extends State<AiChatPage> {
   /// 否则两条顶栏叠着，子界面被挤到壳层顶栏下方，看着像"在下面追加了一层"。
   /// 只有全局页有这层两级视图；作业内嵌的单会话页是路由推出来的，不受影响。
   void _syncImmersive() {
-    if (_multi && _inChat) {
+    // 批量管理态也要占满顶栏：它的顶栏与壳层顶栏是"同一层"的关系，
+    // 叠成两条会很难看（用户反馈"应该在它层级上面"）
+    if (_multi && (_inChat || _manage)) {
       ShellChrome.enterSubView();
     } else {
       ShellChrome.exitSubView();
@@ -265,6 +267,7 @@ class _AiChatPageState extends State<AiChatPage> {
     }
     _sel.clear();
     _manage = false;
+    _syncImmersive();
     _refreshConvos();
   }
 
@@ -1095,6 +1098,7 @@ class _AiChatPageState extends State<AiChatPage> {
                               _manage = false;
                               _sel.clear();
                             });
+                            _syncImmersive();
                         }
                       },
                       itemBuilder: (context) => [
@@ -1125,10 +1129,13 @@ class _AiChatPageState extends State<AiChatPage> {
                       ),
                     ),
                     TextButton(
-                      onPressed: () => setState(() {
-                        _manage = false;
-                        _sel.clear();
-                      }),
+                      onPressed: () {
+                        setState(() {
+                          _manage = false;
+                          _sel.clear();
+                        });
+                        _syncImmersive();
+                      },
                       child: const Text('完成', style: TextStyle(fontSize: 12)),
                     ),
                   ],
@@ -1164,7 +1171,10 @@ class _AiChatPageState extends State<AiChatPage> {
                       child: IconButton.outlined(
                         tooltip: '管理会话',
                         icon: const Icon(Icons.checklist_rounded, size: 20),
-                        onPressed: () => setState(() => _manage = true),
+                        onPressed: () {
+                          setState(() => _manage = true);
+                          _syncImmersive();
+                        },
                       ),
                     ),
                   ],

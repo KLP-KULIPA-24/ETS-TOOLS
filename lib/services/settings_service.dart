@@ -8,6 +8,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'region_data.dart';
+import 'floating_bridge.dart';
 
 /// 布局模式：自动（平板左栏/手机底栏）/ 平板（模仿电脑）/ 手机
 enum UiLayoutMode { auto, tablet, mobile }
@@ -329,6 +330,11 @@ class SettingsService extends ChangeNotifier {
     showDemoData = _sp.getBool('showDemoData') ?? true;
     grade = _sp.getString('grade') ?? '';
     region = _sp.getString('region') ?? '';
+    // 旧版本存的是 dp 值（<100），按新的像素口径夹回区间
+    floatingSize = (_sp.getInt('floatingSize') ?? 160).clamp(100, 360);
+    floatingOpacity = _sp.getDouble('floatingOpacity') ?? 0.96;
+    alwaysOnTop = _sp.getBool('alwaysOnTop') ?? false;
+    hotkeyToggle = _sp.getBool('hotkeyToggle') ?? true;
     useRoot = _sp.getBool('useRoot') ?? true;
     useShizuku = _sp.getBool('useShizuku') ?? true;
     autoCheckUpdate = _sp.getBool('autoCheckUpdate') ?? true;
@@ -720,6 +726,53 @@ class SettingsService extends ChangeNotifier {
       grade.isNotEmpty && !isJunior && region.contains('广东');
 
   // ---- 作业管理：已完成 / 已删除（按目录 key）----
+  /// 悬浮球直径，**单位是屏幕像素**（100 小 ~ 360 大，默认 160）。
+  /// 用 px 而不是 dp：56dp 在 2x 屏上就是 112px，用户看到的就是"100 的大小"，
+  /// 按 dp 给值会一直对不上眼。
+  int floatingSize = 160;
+
+  /// 悬浮窗不透明度 0.5~1.0
+  double floatingOpacity = 0.96;
+
+  /// 电脑端窗口置顶
+  bool alwaysOnTop = false;
+
+  /// 电脑端全局快捷键显示/隐藏窗口
+  bool hotkeyToggle = true;
+
+  void setFloatingSize(int v) {
+    floatingSize = v.clamp(100, 360);
+    _sp.setInt('floatingSize', floatingSize);
+    notifyListeners();
+    _applyFloating();
+  }
+
+  void _applyFloating() {
+    FloatingBridge.applyAndroidOverlay(
+      sizeDp: floatingSize,
+      opacity: floatingOpacity,
+    );
+  }
+
+  void setFloatingOpacity(double v) {
+    floatingOpacity = v.clamp(0.4, 1.0);
+    _sp.setDouble('floatingOpacity', floatingOpacity);
+    notifyListeners();
+    _applyFloating();
+  }
+
+  void setAlwaysOnTop(bool v) {
+    alwaysOnTop = v;
+    _sp.setBool('alwaysOnTop', v);
+    notifyListeners();
+  }
+
+  void setHotkeyToggle(bool v) {
+    hotkeyToggle = v;
+    _sp.setBool('hotkeyToggle', v);
+    notifyListeners();
+  }
+
   Set<String> get completedDirs =>
       (_sp.getStringList('completedDirs') ?? []).toSet();
   Set<String> get deletedDirs =>

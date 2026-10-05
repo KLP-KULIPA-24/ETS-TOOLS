@@ -1,0 +1,150 @@
+/// 悬浮窗调整面板：大小 / 不透明度 / 电脑端置顶 + 快捷键开关。
+/// 底部导航的「悬浮窗」按钮与设置页卡片共用这一份，避免两套 UI 走样。
+library;
+
+import 'dart:io';
+
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:window_manager/window_manager.dart';
+
+import '../services/floating_bridge.dart';
+import '../services/hotkey_channel.dart';
+import '../services/settings_service.dart';
+import 'style.dart';
+
+/// 弹出悬浮窗设置面板
+Future<void> showFloatingSettingsSheet(BuildContext context) {
+  final s = context.read<SettingsService>();
+  return showModalBottomSheet<void>(
+    context: context,
+    showDragHandle: true,
+    builder: (context) => ListenableBuilder(
+      listenable: s,
+      builder: (context, _) {
+        final cs = Theme.of(context).colorScheme;
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.picture_in_picture_alt_rounded,
+                        size: 18, color: cs.primary),
+                    const SizedBox(width: 8),
+                    Text(
+                      '悬浮窗',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: AppText.wBold,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                // 大小：悬浮球直径（与不透明度一样是滑杆）
+                Row(
+                  children: [
+                    Text('悬浮球大小', style: TextStyle(fontSize: 12, color: cs.outline)),
+                    const Spacer(),
+                    Text(
+                      '${s.floatingSize} px',
+                      style: TextStyle(fontSize: 12, color: cs.outline),
+                    ),
+                  ],
+                ),
+                Slider(
+                  value: s.floatingSize.toDouble().clamp(100, 360),
+                  min: 100,
+                  max: 360,
+                  divisions: 26, // 每 10px 一档
+                  label: '${s.floatingSize} px',
+                  onChanged: (v) => s.setFloatingSize(v.round()),
+                ),
+                const SizedBox(height: 4),
+                // 不透明度
+                Row(
+                  children: [
+                    Text('不透明度', style: TextStyle(fontSize: 12, color: cs.outline)),
+                    const Spacer(),
+                    Text(
+                      '${(s.floatingOpacity * 100).round()}%',
+                      style: TextStyle(fontSize: 12, color: cs.outline),
+                    ),
+                  ],
+                ),
+                Slider(
+                  value: s.floatingOpacity,
+                  min: 0.4,
+                  max: 1.0,
+                  divisions: 12,
+                  label: '${(s.floatingOpacity * 100).round()}%',
+                  onChanged: (v) => s.setFloatingOpacity(v),
+                  onChangeEnd: (_) => FloatingBridge.applyAndroidOverlay(
+                    sizeDp: s.floatingSize,
+                    opacity: s.floatingOpacity,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                // 电脑端：窗口置顶 + 快捷键
+                if (Platform.isWindows) ...[
+                  SwitchListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('窗口置顶', style: TextStyle(fontSize: 14)),
+                    subtitle: const Text(
+                      '窗口始终显示在最前',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                    value: s.alwaysOnTop,
+                    onChanged: (v) async {
+                      s.setAlwaysOnTop(v);
+                      await windowManager.setAlwaysOnTop(v);
+                    },
+                  ),
+                  SwitchListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('快捷键显示/隐藏', style: TextStyle(fontSize: 14)),
+                    subtitle: const Text(
+                      'Ctrl+Alt+E 一键呼出或收起窗口',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                    value: s.hotkeyToggle,
+                    onChanged: (v) async {
+                      s.setHotkeyToggle(v);
+                      await HotkeyChannel.setEnabled(v);
+                    },
+                  ),
+                ],
+                const SizedBox(height: 6),
+                // 立即开合
+                FilledButton.tonalIcon(
+                  onPressed: () async {
+                    final (ok, _) = await FloatingBridge.toggleAndroidOverlay();
+                    if (!context.mounted) return;
+                    if (!ok) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            '未获得悬浮窗权限：请在系统设置里允许'
+                            '「显示在其他应用上层」',
+                          ),
+                        ),
+                      );
+                    }
+                  },
+                  icon: const Icon(Icons.open_in_new_rounded, size: 18),
+                  label: const Text('显示 / 隐藏悬浮窗'),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    ),
+  );
+}

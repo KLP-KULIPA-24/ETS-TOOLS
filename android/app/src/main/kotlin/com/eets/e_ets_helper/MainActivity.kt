@@ -85,7 +85,12 @@ class MainActivity : FlutterActivity() {
                     "floatingShow" -> {
                         val title = call.argument<String>("title") ?: ""
                         val answers = call.argument<String>("answers") ?: ""
+                        val size = call.argument<Int>("size") ?: 0
+                        val opacity = call.argument<Double>("opacity") ?: 0.96
                         runOnUiThread {
+                            if (size > 0) {
+                                floating.applyStyle(size, opacity)
+                            }
                             if (!floating.hasPermission()) {
                                 // 未授权：直接拉起系统"显示在其他应用上层"设置页
                                 floating.openPermissionSettings()
@@ -106,6 +111,14 @@ class MainActivity : FlutterActivity() {
                     "floatingHide" -> {
                         runOnUiThread {
                             floating.hide()
+                            result.success("ok")
+                        }
+                    }
+                    "floatingApply" -> {
+                        val w = call.argument<Int>("size") ?: 44
+                        val op = call.argument<Double>("opacity") ?: 0.96
+                        runOnUiThread {
+                            floating.applyStyle(w, op)
                             result.success("ok")
                         }
                     }

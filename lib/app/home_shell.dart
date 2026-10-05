@@ -37,6 +37,7 @@ class _HomeShellState extends State<HomeShell> {
   @override
   void dispose() {
     TourHub.request.removeListener(_onTourRequest);
+    ShellChrome.requestTab.removeListener(_onRequestTab);
     super.dispose();
   }
 
@@ -45,6 +46,14 @@ class _HomeShellState extends State<HomeShell> {
     // 那个标签页会没有壳层顶栏
     ShellChrome.exitSubView();
     setState(() => _index = i);
+  }
+
+  /// 页面内请求切标签（"去填写考试信息"等）：消费即清空
+  void _onRequestTab() {
+    final i = ShellChrome.requestTab.value;
+    if (i == null || !mounted) return;
+    ShellChrome.requestTab.value = null;
+    _switchTab(i);
   }
 
   void _onTourRequest() {
@@ -65,6 +74,8 @@ class _HomeShellState extends State<HomeShell> {
     super.initState();
     // 任何容器（如设置页）请求看某页教程 → 切过去并播放
     TourHub.request.addListener(_onTourRequest);
+    // 页面内"去设置"之类：请求壳层切标签
+    ShellChrome.requestTab.addListener(_onRequestTab);
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final pending = Ambient.I.popPendingFix;
       await Ambient.I.clearArmLast();
@@ -233,19 +244,18 @@ class _HomeShellState extends State<HomeShell> {
     tooltip: '悬浮窗展示答案',
     icon: const Icon(Icons.picture_in_picture_alt_rounded),
     onPressed: () async {
-      final shown = await FloatingBridge.toggleAndroidOverlay();
-      if (!context.mounted) return;
-      if (!shown) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            duration: Duration(seconds: 8),
-            content: Text(
-              '未获得悬浮窗权限：请在系统「设置 → 应用 → 特殊应用权限 → '
-              '显示在其他应用上层」允许本应用后，再点一次悬浮窗按钮',
-            ),
+      final (ok, _) = await FloatingBridge.toggleAndroidOverlay();
+      if (!context.mounted || ok) return;
+      // 只有真正失败才提示——收起是正常操作
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          duration: Duration(seconds: 8),
+          content: Text(
+            '未获得悬浮窗权限：请在系统「设置 → 应用 → 特殊应用权限 → '
+            '显示在其他应用上层」允许本应用后，再点一次悬浮窗按钮',
           ),
-        );
-      }
+        ),
+      );
     },
   );
 

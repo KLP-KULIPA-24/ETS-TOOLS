@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
+import '../../app/shell_chrome.dart';
 import '../../models/ets_models.dart';
 import '../../services/ets_data_service.dart';
 import '../../services/settings_service.dart';
@@ -15,7 +16,6 @@ import '../../widgets/style.dart';
 import '../../widgets/tour_guide.dart';
 import '../../widgets/extract_walkthrough.dart';
 import '../detail/content_detail_page.dart';
-import '../settings/settings_page.dart';
 import 'group_page.dart';
 import '../../services/achievements.dart';
 
@@ -242,9 +242,8 @@ class _HomeworkPageState extends State<HomeworkPage> {
             ),
             const SizedBox(height: 8),
             Text(
-              '作业的排版识别按年级与地区匹配'
-              '（"Part A/B/C 模仿朗读 / 角色扮演 / 故事复述"'
-              '为广东高中卷模式）。\n'
+              '作业的排版识别按年级与地区匹配，'
+              '不同地区卷面的结构不一样。\n'
               '当前：年级 ${settings.grade.isEmpty ? '未填' : settings.grade}'
               ' · 地区 ${settings.region.isEmpty ? '未填' : settings.region}。\n'
               '填好后回到本页点「刷新」即可加载作业。',
@@ -256,9 +255,9 @@ class _HomeworkPageState extends State<HomeworkPage> {
             ),
             const SizedBox(height: 16),
             FilledButton.tonalIcon(
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const SettingsPage()),
-              ),
+              // 走壳层切标签（不 push 设置页）：设置页是壳层的标签页，
+              // 直接 push 会脱离壳层布局，进去即卡死
+              onPressed: () => ShellChrome.requestTab.value = 4,
               icon: const Icon(Icons.edit_note_rounded, size: 18),
               label: const Text('去填写考试信息'),
             ),

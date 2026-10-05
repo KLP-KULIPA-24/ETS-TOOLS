@@ -32,6 +32,7 @@ import 'services/demo_service.dart';
 import 'services/ets_data_service.dart';
 import 'services/settings_service.dart';
 import 'services/tray_menu_service.dart';
+import 'services/hotkey_channel.dart';
 
 /// 桌面（Windows）视频控件主题：进度条/拖块用应用主题色
 MaterialDesktopVideoControlsThemeData _desktopControlsTheme(Color accent) =>
@@ -115,6 +116,10 @@ Future<void> main() async {
     windowManager.setPreventClose(false);
     windowManager.addListener(_WindowCloseGuard());
     await _trayCtl.init();
+    // 电脑端：窗口置顶 + Ctrl+Alt+E 全局快捷键（设置页可开关）
+    final s0 = SettingsService.I;
+    await windowManager.setAlwaysOnTop(s0.alwaysOnTop);
+    await HotkeyChannel.init(enabled: s0.hotkeyToggle);
   }
 
   runApp(const EtsHelperApp());

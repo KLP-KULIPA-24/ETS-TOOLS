@@ -10,8 +10,13 @@ import 'package:flutter/foundation.dart';
 class ShellChrome {
   ShellChrome._();
 
-  /// 为 true 时，手机端壳层不画顶栏。
+  /// 为 true 时，手机端壳层不画顶栏（子界面占满整个内容区）
   static final ValueNotifier<bool> immersive = ValueNotifier<bool>(false);
+
+  /// 请求壳层切到某个标签页（0 作业 / 1 修改 / 2 AI 对话 / 3 成就 / 4 设置）。
+  /// 页面内的"去设置"按钮走这里——设置页本身是壳层的标签页，
+  /// 直接 Navigator.push 一个脱离壳层的副本会卡死。
+  static final ValueNotifier<int?> requestTab = ValueNotifier<int?>(null);
 
   /// 进入子界面时登记沉浸态。切标签页时壳层会自己复位，所以这里不用还原。
   static void enterSubView() => immersive.value = true;

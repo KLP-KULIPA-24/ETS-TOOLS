@@ -11,6 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart';
 
 import 'achievements.dart';
+import 'settings_service.dart';
 
 class FloatingBridge {
   static const _channel = MethodChannel('eets/shell');
@@ -61,9 +62,12 @@ class FloatingBridge {
   static Future<bool> showAndroidOverlay() async {
     Achievements.unlock('floating');
     try {
+      // 尺寸/透明度随 show 一起下发：刚打开就用设置里的值
       final r = await _channel.invokeMethod<String>('floatingShow', {
         'title': title,
         'answers': answers,
+        'size': SettingsService.I.floatingSize,
+        'opacity': SettingsService.I.floatingOpacity,
       });
       return r == 'ok';
     } catch (e) {
@@ -91,19 +95,40 @@ class FloatingBridge {
     } catch (_) {}
   }
 
-  /// 顶栏按钮的开关切换：显示中→收起；隐藏中→显示。
-  /// 返回 true = 切换后是显示态。
-  static Future<bool> toggleAndroidOverlay() async {
+  /// 顶栏按钮的开关切换。返回 (成功, 切换后是否显示)。
+  /// 收起是正常操作，不能当成"没权限"报给用户（此前误报过一次）。
+  static Future<(bool, bool)> toggleAndroidOverlay() async {
     try {
       final active =
           await _channel.invokeMethod<bool>('floatingActive') ?? false;
       if (active) {
         await hideAndroidOverlay();
-        return false;
+        return (true, false);
       }
-      return await showAndroidOverlay();
+      Achievements.unlock('floating');
+      // 尺寸/透明度随 show 一起下发：刚打开就用设置里的值
+      final r = await _channel.invokeMethod<String>('floatingShow', {
+        'title': title,
+        'answers': answers,
+        'size': SettingsService.I.floatingSize,
+        'opacity': SettingsService.I.floatingOpacity,
+      });
+      return (r == 'ok', r == 'ok');
     } catch (_) {
-      return false;
+      return (false, false);
     }
+  }
+
+  /// 应用外观设置（展开宽度 / 不透明度）到已显示的悬浮窗
+  static Future<void> applyAndroidOverlay({
+    required int sizeDp,
+    required double opacity,
+  }) async {
+    try {
+      await _channel.invokeMethod<String>('floatingApply', {
+        'size': sizeDp,
+        'opacity': opacity,
+      });
+    } catch (_) {}
   }
 }

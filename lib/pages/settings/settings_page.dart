@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../widgets/extract_walkthrough.dart';
+import '../../widgets/floating_settings_sheet.dart';
 
 import '../../services/ai_service.dart';
 import '../../services/ets_data_service.dart';
@@ -43,6 +44,7 @@ class _SettingsPageState extends State<SettingsPage> {
   final _kAi = GlobalKey();
   final _kData = GlobalKey();
   final _kExam = GlobalKey();
+  final _kFloating = GlobalKey();
   final _kAbout = GlobalKey();
   int _section = 0;
   String? _prov;
@@ -53,6 +55,7 @@ class _SettingsPageState extends State<SettingsPage> {
     ('AI 配置', _kAi),
     ('数据目录', _kData),
     ('考试信息', _kExam),
+    ('悬浮窗', _kFloating),
     ('关于', _kAbout),
   ];
 
@@ -160,7 +163,8 @@ class _SettingsPageState extends State<SettingsPage> {
                         _navChip(context, 'AI 配置', 1),
                         _navChip(context, '数据目录', 2),
                         _navChip(context, '考试信息', 3),
-                        _navChip(context, '关于', 4),
+                        _navChip(context, '悬浮窗', 4),
+                        _navChip(context, '关于', 5),
                       ],
                     ),
                   ),
@@ -492,6 +496,42 @@ class _SettingsPageState extends State<SettingsPage> {
                               ],
                             ),
                           ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+
+                  // ---- 悬浮窗（大小 / 不透明度 / 电脑端置顶与快捷键）----
+                  AppCard(
+                    key: _kFloating,
+                    radius: 18,
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _cardTitle(
+                          context,
+                          '悬浮窗',
+                          Icons.picture_in_picture_alt_rounded,
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          '折叠时是一个软件图标的圆形小球，点开展开当前作业答案；'
+                          '球的大小与不透明度在这里调。',
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: cs.outline, height: 1.5),
+                        ),
+                        const SizedBox(height: 12),
+                        // 直接复用底部导航那份面板（两处 UI 不走样）
+                        SizedBox(
+                          height: 44,
+                          child: FilledButton.tonalIcon(
+                            onPressed: () =>
+                                showFloatingSettingsSheet(context),
+                            icon: const Icon(Icons.tune_rounded, size: 18),
+                            label: const Text('打开悬浮窗设置'),
+                          ),
+                        ),
                       ],
                     ),
                   ),
