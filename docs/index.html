@@ -122,8 +122,13 @@ section { max-width: 1120px; margin: 0 auto; padding: 0 var(--s4); }
   background: color-mix(in srgb, var(--bg) 62%, transparent);
   box-shadow: var(--sh-md), inset 0 1px 0 rgba(255,255,255,.14);
 }
-.brand { display: flex; align-items: center; gap: var(--s2); font-size: var(--f-md); font-weight: 600; }
-.brand .mark { width: 24px; height: 24px; border-radius: var(--r-sheet); display: block; }
+.brand { display: flex; align-items: center; gap: var(--s2); font-size: var(--f-md); font-weight: 600; text-decoration: none; }
+.brand .mark {
+  /* 锁死尺寸：手机档文字隐藏后 .brand 会被压窄，泛化的 img{max-width:100%}
+     就把宽度夹扁而高度不变（实测 19×24 椭圆）。flex:none + max-width:none 免疫。 */
+  width: 24px; height: 24px; flex: none; max-width: none; object-fit: cover;
+  border-radius: var(--r-sheet); display: block;
+}
 .nav-ver {
   font-size: 11px; font-weight: 600; color: var(--primary);
   padding: 2px 8px; border-radius: 999px;
@@ -278,11 +283,20 @@ html[data-theme="light"] .feat-card {
   animation: curtainUp 1900ms cubic-bezier(.4,0,.2,1) forwards;
 }
 .curtain-mark {
-  font-size: clamp(28px, 3.4vw, 44px); font-weight: 600; letter-spacing: -.02em;
-  color: var(--text);
+  display: flex; flex-direction: column; align-items: center; gap: 14px;
+  text-align: center;
   /* 入场→停留→缓缓淡出三段，不再是"出现即消失" */
   animation: curtainMark 1900ms cubic-bezier(.22,1,.36,1) forwards;
 }
+.curtain-mark-ic {
+  width: 56px; height: 56px; border-radius: 15px;
+  box-shadow: 0 10px 30px color-mix(in srgb, var(--primary) 26%, transparent);
+}
+.curtain-mark strong {
+  font-size: clamp(28px, 3.4vw, 44px); font-weight: 600; letter-spacing: -.02em;
+  color: var(--text); line-height: 1.1;
+}
+.curtain-mark span { font-size: 15px; color: var(--muted); letter-spacing: .02em; }
 @keyframes curtainUp {
   0%   { opacity: 1; }
   72%  { opacity: 1; }
@@ -315,17 +329,38 @@ html[data-theme="light"] .feat-card {
 }
 
 /* ---------- 手机端专项（≤760px）：触摸目标 / 安全区 / 节奏 ---------- */
+/* 横向溢出防护：手机上出现"右侧空白 + 组件溢出"基本都是某个子元素
+   （表格/长串/媒体）撑破了版心。这里从根上兜住：外层不横滑，
+   宽内容自己在自己的盒子里横滑。 */
+@media (max-width: 760px) {
+  html, body { overflow-x: hidden; }
+  .hero, .sec, .wrap, footer { max-width: 100vw; overflow-x: clip; }
+  img, video, svg, canvas { max-width: 100%; height: auto; }
+  .tbl { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  pre, code, .file-row, .dl-row { overflow-wrap: anywhere; word-break: break-word; }
+  .feat { grid-template-columns: 1fr; }
+  .svc-grid, .steps, .stats { grid-template-columns: 1fr; }
+}
 @media (max-width: 760px) {
   :root { --f-hero: clamp(40px, 11.5vw, 60px); --f-sec: clamp(28px, 7.6vw, 38px); }
   .hero { padding-top: var(--s4); }
   .hero-copy { padding-bottom: var(--s3); }
-  .hero-cta { margin-top: var(--s4); }
-  .hero-cta .btn { width: 100%; padding: 14px 24px; }
+  .hero-cta { margin-top: var(--s4); gap: 8px; }
+  /* 手机上三个按钮不要撑满整行：又高又满显得笨重，收成紧凑胶囊按需换行 */
+  .hero-cta .btn { width: auto; flex: 0 1 auto; padding: 9px 16px; font-size: 14px; }
   .hero-meta { margin-top: var(--s3); gap: 6px; line-height: 1.4; }
   .hero-meta span { padding: 8px 14px; }
   /* 球透明度与文字光晕已提为基础规则（双端同构图） */
   .nav { padding: var(--s2) var(--s3); }
   .nav-in { padding: 6px 6px 6px var(--s3); }
+  /* 手机上 6 个链接放不下：链接区自己横滑，深浅色按钮固定在右端不被挤走 */
+  .nav-links {
+    flex: 1 1 auto; min-width: 0; overflow-x: auto; overscroll-behavior-x: contain;
+    scrollbar-width: none; -ms-overflow-style: none;
+  }
+  .nav-links::-webkit-scrollbar { display: none; }
+  .nav-links > a { flex: 0 0 auto; }
+  .theme-btn { flex: 0 0 auto; margin-left: 4px; }
   .btn { padding: 13px 24px; }
   .btn-sm { padding: 11px 18px; }
   .sec { padding-top: 88px; }
@@ -351,8 +386,10 @@ html[data-theme="light"] .feat-card {
   section { padding: 0 var(--s3); }
 }
 
-/* ---------- 中等宽度专项（≤1180px，窄窗/页面放大档）：降一档排版 ---------- */
-@media (max-width: 1180px) {
+/* ---------- 中等宽度专项（761–1180px，窄窗/页面放大档）：降一档排版 ----------
+   必须卡下界：手机（≤760）也会命中 ≤1180，特色卡会被压成 3 列，
+   正是用户截图里"变形 + 右侧空白 + 组件溢出"的来源。 */
+@media (min-width: 761px) and (max-width: 1180px) {
   :root { --f-hero: clamp(44px, 7.2vw, 84px); --f-sec: clamp(30px, 4.6vw, 46px); --f-lead: 15px; }
   .hero { min-height: 430px; }
   .feat { padding: var(--s4) var(--s3) 0; gap: var(--s3); grid-template-columns: repeat(3, 1fr); }
@@ -682,6 +719,12 @@ html[data-theme="light"] .card {
     opacity: 1; transform: none;
     transition: opacity 700ms cubic-bezier(.25,.8,.35,1), transform 1000ms cubic-bezier(.16,1,.3,1);
   }
+  /* 手机上入场一律走"从下"：左右位移会把未触发的区块顶出屏幕右侧，
+     看着就是"组件溢出/变形"。必须排在上面基础位移之后才压得住（同优先级看顺序） */
+  @media (max-width: 760px) {
+    html.js .rev[data-from="left"],
+    html.js .rev[data-from="right"] { transform: translate3d(0, 44px, 0); }
+  }
 }
 
 
@@ -966,7 +1009,9 @@ section.sec { counter-increment: sec; }
 @media (max-width: 1024px) {
   .sec { padding-top: var(--s6); }
 }
-@media (max-width: 900px) {
+/* 卡 761 下界：手机（≤760）走上面那条紧凑胶囊规则，
+   这里的全宽换行只给 761–900 的中档，否则会把手机按钮又撑满整行 */
+@media (min-width: 761px) and (max-width: 900px) {
   .hero { padding-top: var(--s5); }
   .hero-cta .btn { flex: 1 1 100%; }
   .file-row { grid-template-columns: 1fr auto; }
@@ -1007,7 +1052,14 @@ html.theming, html.theming *, html.theming *::before, html.theming *::after {
 <body>
 
 <!-- 全局层：开场揭幕 / 滚动进度 / 光标柔光 -->
-<div id="curtain" aria-hidden="true"><div class="curtain-mark">E听说助手</div></div>
+<div id="curtain" aria-hidden="true">
+  <!-- 开场幕标识：图标 + 名称 + 一行核心功能，随幕布一起淡出 -->
+  <div class="curtain-mark">
+    <img class="curtain-mark-ic" src="./assets/app-icon.png" alt="" width="56" height="56" />
+    <strong>E听说助手</strong>
+    <span>答案 · 成绩修改 · AI 解析</span>
+  </div>
+</div>
 <div id="scrollProgress" aria-hidden="true"></div>
 <div id="cursorGlow" aria-hidden="true"></div>
 <button id="toTop" type="button" aria-label="回到顶部">
@@ -1038,7 +1090,7 @@ html.theming, html.theming *, html.theming *::before, html.theming *::after {
     <symbol id="i-volume-low" viewBox="0 0 24 24"><path d="M4 9.5h3.5L12 6v12l-4.5-3.5H4z"/><path d="M15.5 9.5a3.5 3.5 0 0 1 0 5"/></symbol>
     <symbol id="i-mute" viewBox="0 0 24 24"><path d="M4 9.5h3.5L12 6v12l-4.5-3.5H4z"/><path d="m16 9.5 4 5m0-5-4 5"/></symbol>
     <symbol id="i-full" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></symbol>
-    <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5M17.5 17.5 1.5-0.5M5 19l1.5-1.5M17.5 6.5 1.5-.5"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></symbol>
     <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/></symbol>
   </defs>
 </svg>
@@ -1048,7 +1100,7 @@ html.theming, html.theming *, html.theming *::before, html.theming *::after {
   <!-- ============ 导航（Liquid Glass 控制层） ============ -->
   <nav class="nav">
     <div class="nav-in">
-      <a class="brand" href="#top" title="回到顶部"><img class="mark" src="./assets/app-icon.png" alt="" width="24" height="24" /><span>E听说助手</span><span class="nav-ver">V0.8.1</span></a>
+      <a class="brand" href="#top" title="回到顶部"><img class="mark" src="./assets/app-icon.png" alt="" width="24" height="24" /><span>E听说助手</span><span class="nav-ver">V0.8.2</span></a>
       <div class="nav-links">
         <a href="#demo">演示</a>
         <a href="#download">下载</a>
@@ -1057,10 +1109,11 @@ html.theming, html.theming *, html.theming *::before, html.theming *::after {
         <a href="#services">服务</a>
         <a href="#faq">常见问题</a>
         <a class="nav-gh" href="https://github.com/KLP-KULIPA-24/ETS-TOOLS" target="_blank" rel="noopener" title="GitHub 开源仓库"><svg class="ic"><use href="#i-repo"/></svg><span>GitHub</span></a>
-        <button class="theme-btn keep" id="themeBtn" type="button" aria-label="切换深浅色">
-          <svg class="ic" id="themeIcon"><use href="#i-moon"/></svg>
-        </button>
       </div>
+      <!-- 深浅色切换固定在右端：手机上链接区横滑，按钮不跟着滑走（否则被挤出屏幕） -->
+      <button class="theme-btn keep" id="themeBtn" type="button" aria-label="切换深浅色">
+        <svg class="ic" id="themeIcon"><use href="#i-moon"/></svg>
+      </button>
     </div>
   </nav>
 
@@ -1357,7 +1410,7 @@ html.theming, html.theming *, html.theming *::before, html.theming *::after {
           <div class="svc-links">
             <a class="btn btn-p btn-sm" href="https://wwblv.lanzoul.com/idVxv4asjhdc" target="_blank" rel="noopener" title="提取码 ets">蓝奏云 · 首选</a>
             <a class="btn btn-g btn-sm" href="https://silver.yukaidi.com/s/xxr5tE" target="_blank" rel="noopener">银盘 · 备选</a>
-            <a class="btn btn-g btn-sm" href="https://gh.b52m.cn/https://github.com/RikkaApps/Shizuku/releases/download/v13.6.0/shizuku-v13.6.0.r1086.2650830c-release.apk" target="_blank" rel="noopener">解析下载 · 推荐</a>
+            <a class="btn btn-g btn-sm" href="https://gh-proxy.org/https://github.com/RikkaApps/Shizuku/releases/download/v13.6.0/shizuku-v13.6.0.r1086.2650830c-release.apk" target="_blank" rel="noopener">解析下载 · 推荐</a>
             <a class="btn btn-g btn-sm" href="https://github.com/RikkaApps/Shizuku/releases/download/v13.6.0/shizuku-v13.6.0.r1086.2650830c-release.apk" target="_blank" rel="noopener">原版下载 · 兜底</a>
           </div>
         </div>
@@ -1395,7 +1448,7 @@ html.theming, html.theming *, html.theming *::before, html.theming *::after {
     <div class="foot-brand">
       <img src="./assets/app-icon.png" alt="" width="28" height="28" style="border-radius:8px" />
       <div>
-        <div class="foot-nm">E听说助手 <span class="foot-ver">V0.8.1</span></div>
+        <div class="foot-nm">E听说助手 <span class="foot-ver">V0.8.2</span></div>
         <div class="foot-sub">本地优先 · 不上传 · 离线可用</div>
       </div>
     </div>
@@ -1434,8 +1487,14 @@ html.theming, html.theming *, html.theming *::before, html.theming *::after {
      这段脚本跑在文档前面时 themeIcon 还是 null，图标会一直停在写死的月亮，
      只有手动点一次才同步——和 dlSheet 那次同一个坑。 */
   function syncThemeIcon() {
-    var el = document.getElementById('themeIcon');
-    if (el) el.setAttribute('href', root.dataset.theme === 'light' ? '#i-moon' : '#i-sun');
+    /* 真正引用 symbol 的是 <use>，改外层 <svg> 的 href 没有任何作用
+       —— 手机端"暗黑模式还是月亮"就是这个 bug。 */
+    var use = document.querySelector('#themeIcon use') || document.getElementById('themeIcon');
+    if (!use) return;
+    var h = root.dataset.theme === 'light' ? '#i-moon' : '#i-sun';
+    use.setAttribute('href', h);
+    // iOS Safari 的 <use> 只认 xlink:href
+    use.setAttributeNS('http://www.w3.org/1999/xlink', 'xlink:href', h);
   }
   function applyTheme(name) {
     root.dataset.theme = name;
@@ -1758,12 +1817,12 @@ html.theming, html.theming *, html.theming *::before, html.theming *::after {
        渠道卡「前往下载」→ 列 3 个版本（该渠道自己的链接）
        平台行「下载」    → 列 4 个渠道（都指向这一个文件）
        （dlSheet 在本脚本之后才解析，脚本执行时还是 null → DOMContentLoaded 兜底绑定） ---------- */
-    var REL_BASE = 'https://github.com/KLP-KULIPA-24/ETS-TOOLS/releases/download/V0.8.1/';
-    var MIRROR = 'https://gh.b52m.cn/';
+    var REL_BASE = 'https://github.com/KLP-KULIPA-24/ETS-TOOLS/releases/download/V0.8.2/';
+    var MIRROR = 'https://gh-proxy.org/';
     var DL_FILES = [
-      { k: 'setup', nm: 'Windows 安装版', sz: 'ETS-TOOLS-Setup-0.8.1-x64.exe', ic: 'i-window' },
-      { k: 'win', nm: 'Windows 绿色便携版', sz: 'ETS-TOOLS-0.8.1-win.zip', ic: 'i-window' },
-      { k: 'apk', nm: 'Android 安装包', sz: 'ETS-TOOLS-Android-0.8.1.apk', ic: 'i-android' }
+      { k: 'setup', nm: 'Windows 安装版', sz: 'ETS-TOOLS-Setup-0.8.2-x64.exe', ic: 'i-window' },
+      { k: 'win', nm: 'Windows 绿色便携版', sz: 'ETS-TOOLS-0.8.2-win.zip', ic: 'i-window' },
+      { k: 'apk', nm: 'Android 安装包', sz: 'ETS-TOOLS-Android-0.8.2.apk', ic: 'i-android' }
     ];
     var DL_CHANS = [
       { k: 'lanzou', nm: '蓝奏云', ic: 'i-cloud', badge: '首选', alt: false,
@@ -1779,14 +1838,14 @@ html.theming, html.theming *, html.theming *::before, html.theming *::after {
                apk: 'https://silver.yukaidi.com/s/E58rfd' } },
       { k: 'parse', nm: 'GitHub 解析下载', ic: 'i-link', badge: '推荐', alt: false,
         desc: '第三方节点中转 · 国内直连更快',
-        url: { setup: MIRROR + REL_BASE + 'ETS-TOOLS-Setup-0.8.1-x64.exe',
-               win: MIRROR + REL_BASE + 'ETS-TOOLS-0.8.1-win.zip',
-               apk: MIRROR + REL_BASE + 'ETS-TOOLS-Android-0.8.1.apk' } },
+        url: { setup: MIRROR + REL_BASE + 'ETS-TOOLS-Setup-0.8.2-x64.exe',
+               win: MIRROR + REL_BASE + 'ETS-TOOLS-0.8.2-win.zip',
+               apk: MIRROR + REL_BASE + 'ETS-TOOLS-Android-0.8.2.apk' } },
       { k: 'direct', nm: 'GitHub 原版下载', ic: 'i-repo', badge: '官方', alt: true,
         desc: '官方 Releases 直链',
-        url: { setup: REL_BASE + 'ETS-TOOLS-Setup-0.8.1-x64.exe',
-               win: REL_BASE + 'ETS-TOOLS-0.8.1-win.zip',
-               apk: REL_BASE + 'ETS-TOOLS-Android-0.8.1.apk' } }
+        url: { setup: REL_BASE + 'ETS-TOOLS-Setup-0.8.2-x64.exe',
+               win: REL_BASE + 'ETS-TOOLS-0.8.2-win.zip',
+               apk: REL_BASE + 'ETS-TOOLS-Android-0.8.2.apk' } }
     ];
     var SHIZUKU_REL = 'https://github.com/RikkaApps/Shizuku/releases/download/v13.6.0/shizuku-v13.6.0.r1086.2650830c-release.apk';
     var SHIZUKU_CHANS = [
