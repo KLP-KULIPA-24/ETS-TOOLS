@@ -21,15 +21,20 @@ class FloatingBridge {
   static String answers = '';
   static String stid = '';
 
+  /// 分段内容（A/B/C…）：给原生悬浮窗渲染成一排按钮
+  static List<Map<String, dynamic>> parts = const [];
+
   /// 主界面 → 悬浮窗（Windows 内存 / Android 持久化）
   static Future<void> set({
     required String title,
     required String answers,
     String stid = '',
+    List<Map<String, dynamic>> parts = const [],
   }) async {
     FloatingBridge.title = title;
     FloatingBridge.answers = answers;
     FloatingBridge.stid = stid;
+    FloatingBridge.parts = parts;
     try {
       final sp = await SharedPreferences.getInstance();
       await sp.setString(
@@ -66,8 +71,11 @@ class FloatingBridge {
       final r = await _channel.invokeMethod<String>('floatingShow', {
         'title': title,
         'answers': answers,
+        'parts': jsonEncode(parts),
         'size': SettingsService.I.floatingSize,
         'opacity': SettingsService.I.floatingOpacity,
+        'theme': SettingsService.I.floatingTheme,
+        'accent': SettingsService.I.accentValue,
       });
       return r == 'ok';
     } catch (e) {
@@ -85,6 +93,7 @@ class FloatingBridge {
       await _channel.invokeMethod<String>('floatingUpdate', {
         'title': title,
         'answers': answers,
+        'parts': jsonEncode(parts),
       });
     } catch (_) {}
   }
@@ -110,8 +119,11 @@ class FloatingBridge {
       final r = await _channel.invokeMethod<String>('floatingShow', {
         'title': title,
         'answers': answers,
+        'parts': jsonEncode(parts),
         'size': SettingsService.I.floatingSize,
         'opacity': SettingsService.I.floatingOpacity,
+        'theme': SettingsService.I.floatingTheme,
+        'accent': SettingsService.I.accentValue,
       });
       return (r == 'ok', r == 'ok');
     } catch (_) {
@@ -128,6 +140,8 @@ class FloatingBridge {
       await _channel.invokeMethod<String>('floatingApply', {
         'size': sizeDp,
         'opacity': opacity,
+        'theme': SettingsService.I.floatingTheme,
+        'accent': SettingsService.I.accentValue,
       });
     } catch (_) {}
   }

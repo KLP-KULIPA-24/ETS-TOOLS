@@ -73,19 +73,35 @@ class _InlineAudioButtonState extends State<InlineAudioButton> {
           children: [
             btn,
             SizedBox(
-              width: 56,
+              width: 96,
               child: Column(
                 children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(999),
-                    child: LinearProgressIndicator(
-                      value: cur / total,
-                      minHeight: 3,
-                      backgroundColor: cs.primary.withValues(alpha: 0.15),
-                      color: cs.primary,
+                  // 可拖动的进度条：之前是只读 LinearProgressIndicator，
+                  // 用户拖不动（反馈"进度条无法拖动"）
+                  SizedBox(
+                    height: 24,
+                    child: SliderTheme(
+                      data: SliderTheme.of(context).copyWith(
+                        trackHeight: 3,
+                        activeTrackColor: cs.primary,
+                        inactiveTrackColor: cs.primary.withValues(alpha: 0.15),
+                        thumbColor: cs.primary,
+                        thumbShape: const RoundSliderThumbShape(
+                          enabledThumbRadius: 5,
+                        ),
+                        overlayShape: const RoundSliderOverlayShape(
+                          overlayRadius: 14,
+                        ),
+                        overlayColor: cs.primary.withValues(alpha: 0.18),
+                      ),
+                      child: Slider(
+                        value: cur.toDouble(),
+                        max: total.toDouble(),
+                        onChanged: (v) =>
+                            AudioPlayerService.I.seek(v.toDouble()),
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 2),
                   Text(
                     '${_hms(pos)}/${_hms(dur)}',
                     style: TextStyle(fontSize: 12, color: cs.outline),

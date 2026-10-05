@@ -405,6 +405,10 @@ class HomeworkEntry {
   /// 套题分区标识：Part A / Part B / Part C（组内顺序分配）
   final String? partLabel;
 
+  /// 数据侧地区标注（res.json 的 engine_area，拼音如 guangdong）。
+  /// 跟设置里的地区比对，判断该不该套广东高中那套 Part A/B/C 排版。
+  final String? engineArea;
+
   HomeworkEntry({
     required this.uid,
     required this.dir,
@@ -417,9 +421,10 @@ class HomeworkEntry {
     this.partName,
     this.partOrder,
     this.partLabel,
+    this.engineArea,
   });
 
-  HomeworkEntry copyWith({String? partLabel}) => HomeworkEntry(
+  HomeworkEntry copyWith({String? partLabel, String? engineArea}) => HomeworkEntry(
     uid: uid,
     dir: dir,
     mtime: mtime,
@@ -431,6 +436,7 @@ class HomeworkEntry {
     partName: partName,
     partOrder: partOrder,
     partLabel: partLabel ?? this.partLabel,
+    engineArea: engineArea ?? this.engineArea,
   );
 
   EtsStructure get structure =>

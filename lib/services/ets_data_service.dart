@@ -54,14 +54,21 @@ class EtsDataService extends ChangeNotifier {
           final key = e.content?.stid ?? e.paper?.tzid ?? '';
           final t = aiTitles[key];
           if (t != null && t.isNotEmpty) {
+            // 手写构造必须带全字段：漏掉 partName/partOrder/engineArea
+            // 会让 AI 标题一应用就丢掉套题分区与地区标注
             found[i] = HomeworkEntry(
               uid: e.uid,
               dir: e.dir,
               mtime: e.mtime,
               content: e.content,
               paper: e.paper,
+              director: e.director,
               title: t,
               titleSource: TitleSource.ai,
+              partName: e.partName,
+              partOrder: e.partOrder,
+              partLabel: e.partLabel,
+              engineArea: e.engineArea,
             );
           }
         }
@@ -175,7 +182,22 @@ class EtsDataService extends ChangeNotifier {
       director: SetDirector(dir: dir.path, parts: parts),
       title: title,
       titleSource: TitleSource.template,
+      engineArea: _engineAreaOf(res),
     );
+  }
+
+  /// res.json 的 engine_area 埋在 exam_type_list[].exam_list[].question_list[] 里
+  /// （拼音如 "guangdong"，不是每份卷都标）。取第一个非空值。
+  static String? _engineAreaOf(Map<String, dynamic>? res) {
+    for (final t in ((res?['exam_type_list'] as List?) ?? const []).whereType<Map>()) {
+      for (final e in ((t['exam_list'] as List?) ?? const []).whereType<Map>()) {
+        for (final q in ((e['question_list'] as List?) ?? const []).whereType<Map>()) {
+          final v = '${q['engine_area'] ?? ''}'.trim();
+          if (v.isNotEmpty) return v;
+        }
+      }
+    }
+    return null;
   }
 
   /// 套题归并：指挥目录按 res.json 声明的 collector 类型吸收同批内容目录，
@@ -210,6 +232,7 @@ class EtsDataService extends ChangeNotifier {
               titleSource: pick.titleSource,
               partName: part.name,
               partOrder: part.order,
+              engineArea: d.engineArea,
             ),
           );
         }
@@ -373,10 +396,13 @@ class EtsDataService extends ChangeNotifier {
         return b.mtime.compareTo(a.mtime);
       });
       // Part A/B/C 标识：按组内顺序分配。
-      // 这套"模仿朗读/角色扮演/故事复述"排版识别切块是广东高中卷特有的
-      // （用户明确：地区含广东 + 高一/高二/高三才启用）——
-      // 其他地区/学段的数据结构可能不同，不套用这套标签
-      if (SettingsService.I.isGuangdongSenior && list.length > 1) {
+      // 这套"模仿朗读/角色扮演/故事复述"排版识别切块是广东高中卷特有的——
+      // 既要看设置（广东 + 高中），也要看数据自己的 engine_area 跟设置地区对不对得上。
+      // 对不上就不套这套标签，退回通用排版（内容照常显示，只是不切块）。
+      final areaOk = SettingsService.I.matchesDataArea(
+        list.firstWhere((e) => e.engineArea != null, orElse: () => list.first).engineArea,
+      );
+      if (SettingsService.I.isGuangdongSenior && areaOk && list.length > 1) {
         for (var i = 0; i < list.length; i++) {
           if (list[i].partLabel == null) {
             list[i] = list[i].copyWith(

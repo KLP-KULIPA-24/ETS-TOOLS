@@ -18,6 +18,9 @@ class ShellChrome {
   /// 直接 Navigator.push 一个脱离壳层的副本会卡死。
   static final ValueNotifier<int?> requestTab = ValueNotifier<int?>(null);
 
+  /// 切标签后还要落到某个分区的锚点（"考试信息"）。设置页消费后置空。
+  static final ValueNotifier<String?> jumpSection = ValueNotifier<String?>(null);
+
   /// 进入子界面时登记沉浸态。切标签页时壳层会自己复位，所以这里不用还原。
   static void enterSubView() => immersive.value = true;
 

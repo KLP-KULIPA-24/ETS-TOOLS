@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
-import '../../app/shell_chrome.dart';
 import '../../models/ets_models.dart';
 import '../../services/ets_data_service.dart';
 import '../../services/settings_service.dart';
@@ -138,21 +137,10 @@ class _HomeworkPageState extends State<HomeworkPage> {
   bool _refreshing = false;
 
   /// 统一刷新入口：Android 上先经 Root/Shizuku 提取再扫描，其余直接扫描。
-  /// 考试信息（年级/地区）没填时直接拦下：识别模式按地区/年级匹配，
-  /// 信息不全解析出来的排版没有意义（用户要求先填再用）。
+  /// 考试信息（年级/地区）没填**不拦**：走通用模板照常输出，细节交给 AI 补；
+  /// 填了才按地区/年级套对应的排版识别模式。
   Future<void> _refresh({bool silent = false}) async {
     if (_refreshing) return;
-    if (!SettingsService.I.examInfoReady) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            duration: Duration(seconds: 4),
-            content: Text('请先到「设置 → 考试信息」填写年级与地区，作业才能正常识别显示'),
-          ),
-        );
-      }
-      return;
-    }
     setState(() => _refreshing = true);
     final messenger = ScaffoldMessenger.of(context);
     final (ok, msg) = await ExtractService.refresh();
@@ -205,67 +193,6 @@ class _HomeworkPageState extends State<HomeworkPage> {
   }
 
   String _groupKey(HomeworkGroup g) => '${g.uid}||${g.structure.name}';
-
-  /// 考试信息没填时的占位页：识别模式按年级/地区匹配，
-  /// 信息不全就不解析作业（用户要求：先填再用）
-  Widget _examInfoPrompt(BuildContext context, SettingsService settings) {
-    final cs = Theme.of(context).colorScheme;
-    return ListView(
-      padding: const EdgeInsets.all(24),
-      children: [
-        const SizedBox(height: 80),
-        Column(
-          children: [
-            Container(
-              width: 72,
-              height: 72,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: cs.primary.withValues(alpha: 0.10),
-                border: Border.all(
-                  color: cs.primary.withValues(alpha: 0.22),
-                ),
-              ),
-              child: Icon(
-                Icons.school_rounded,
-                size: 34,
-                color: cs.primary,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              '请先填写考试信息',
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '作业的排版识别按年级与地区匹配，'
-              '不同地区卷面的结构不一样。\n'
-              '当前：年级 ${settings.grade.isEmpty ? '未填' : settings.grade}'
-              ' · 地区 ${settings.region.isEmpty ? '未填' : settings.region}。\n'
-              '填好后回到本页点「刷新」即可加载作业。',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: cs.outline,
-                height: 1.5,
-              ),
-            ),
-            const SizedBox(height: 16),
-            FilledButton.tonalIcon(
-              // 走壳层切标签（不 push 设置页）：设置页是壳层的标签页，
-              // 直接 push 会脱离壳层布局，进去即卡死
-              onPressed: () => ShellChrome.requestTab.value = 4,
-              icon: const Icon(Icons.edit_note_rounded, size: 18),
-              label: const Text('去填写考试信息'),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
 
   String _previewOf(HomeworkEntry e) {
     final c = e.content;
@@ -400,9 +327,8 @@ class _HomeworkPageState extends State<HomeworkPage> {
           ],
         ),
       ),
-      body: !settings.examInfoReady
-          ? _examInfoPrompt(context, settings)
-          : RefreshIndicator(
+      // 考试信息没填也照常显示作业：走通用模板，细节交给 AI 补（用户要求）
+      body: RefreshIndicator(
         onRefresh: () => _refresh(silent: true),
         child: CustomScrollView(
           controller: _scroll,

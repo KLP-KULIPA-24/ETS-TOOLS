@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../widgets/extract_walkthrough.dart';
 import '../../widgets/floating_settings_sheet.dart';
 
+import '../../app/shell_chrome.dart';
 import '../../services/ai_service.dart';
 import '../../services/ets_data_service.dart';
 import '../../services/settings_service.dart';
@@ -63,6 +64,24 @@ class _SettingsPageState extends State<SettingsPage> {
   void initState() {
     super.initState();
     _scroll.addListener(_syncSection);
+    ShellChrome.jumpSection.addListener(_onJumpSection);
+  }
+
+  /// 从别的页跳进来（"去填写考试信息"）：直接落到对应分区，不只开设置页
+  void _onJumpSection() {
+    final name = ShellChrome.jumpSection.value;
+    if (name == null || name.isEmpty) return;
+    ShellChrome.jumpSection.value = null;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final idx = _sections.indexWhere((e) => e.$1 == name);
+      if (idx < 0) return;
+      setState(() => _section = idx);
+      // 等列表布局稳定（卡片都是一次性全量构建的，但首帧后仍要等一帧）
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _jumpTo(_sections[idx].$2);
+      });
+    });
   }
 
   void _jumpTo(GlobalKey key) {
@@ -128,6 +147,7 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   void dispose() {
     _scroll.removeListener(_syncSection);
+    ShellChrome.jumpSection.removeListener(_onJumpSection);
     _scroll.dispose();
     super.dispose();
   }

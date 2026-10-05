@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../models/ets_models.dart';
+import '../../services/floating_bridge.dart';
+import '../../services/floating_parts.dart';
 import '../../services/audio_player_service.dart';
 import '../../services/lexicon_service.dart';
 import '../../widgets/common.dart';
@@ -22,6 +24,19 @@ class GroupPage extends StatefulWidget {
 
 class _GroupPageState extends State<GroupPage> {
   bool hideMeaning = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // 套题 = 一份卷子的 A/B/C 三段：把分段内容同步给悬浮窗，
+    // 顶栏按钮一按就能按段切换查看
+    final parts = partsOfGroup(widget.group);
+    FloatingBridge.set(
+      title: widget.group.displayName,
+      answers: parts.map((e) => e.text).join('\n\n'),
+      parts: [for (final e in parts) {'label': e.label, 'text': e.text}],
+    );
+  }
 
   @override
   Widget build(BuildContext context) {

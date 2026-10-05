@@ -37,12 +37,25 @@ class FloatingBall(private val context: Context) {
     private var params: WindowManager.LayoutParams? = null
     private var titleView: TextView? = null
     private var bodyView: TextView? = null
+    private var tabsRow: LinearLayout? = null
+    private var partIndex = 0
+
+    /** 分段内容（label + text），A/B/C 一排按钮 */
+    private var parts: List<Pair<String, String>> = emptyList()
+
+    /** 配色：follow / light / dark */
+    private var theme = "follow"
+
+    private var dark = false
+
+    /** 主题色（ARGB，由 Flutter 侧 accentValue 传入） */
+    private var accent = 0xFF4F7CFF.toInt()
     private var ballView: View? = null
     private var expandedBox: LinearLayout? = null
     private var expanded = false
 
     /** 球直径（dp，设置页滑杆可调 60~160）与不透明度 */
-    private var ballSizeDp = 80
+    private var ballSizeDp = 50
     private var opacity = 0.96f
 
     private fun expandedWidthDp(): Int = (ballSizeDp * 3).coerceIn(220, 420)
@@ -141,6 +154,17 @@ class FloatingBall(private val context: Context) {
         })
         box.addView(head)
 
+        // A/B/C 透明按钮条：点哪段看哪段（用户要求）
+        val tabs = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        tabsRow = tabs
+        box.addView(tabs, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+        ).apply { topMargin = dp(8) })
+
         val scroll = ScrollView(context).apply {
             isVerticalScrollBarEnabled = false
         }
@@ -202,9 +226,70 @@ class FloatingBall(private val context: Context) {
         return card
     }
 
+    /** 重建 A/B/C 按钮条；单击切换当前段 */
+    private fun buildTabs() {
+        val row = tabsRow ?: return
+        row.removeAllViews()
+        if (parts.size < 2) {
+            row.visibility = View.GONE
+            return
+        }
+        row.visibility = View.VISIBLE
+        for ((i, part) in parts.withIndex()) {
+            val active = i == partIndex
+            val btn = TextView(context).apply {
+                text = part.first
+                textSize = 13f
+                gravity = Gravity.CENTER
+                val tint = accentColor()
+                // 未选中＝主题色压淡（原写法 tint and 0x66FFFFFF.inv() 是纯位取反，
+                // 结果把 RGB 全掩成 0 = 纯黑，深色底上根本看不见）
+                setTextColor(if (active) tint else withAlpha(tint, 150))
+                setPadding(dp(10), dp(4), dp(10), dp(4))
+                background = GradientDrawable().apply {
+                    cornerRadius = dp(14).toFloat()
+                    // 透明按钮：选中才给一点主题色底
+                    if (active) setColor(withAlpha(accentColor(), 38))
+                }
+                setOnClickListener {
+                    partIndex = i
+                    bodyView?.text = part.second.ifBlank { "（暂无内容）" }
+                    buildTabs()
+                }
+            }
+            val lp = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT,
+            )
+            if (i > 0) lp.leftMargin = dp(6)
+            row.addView(btn, lp)
+        }
+    }
+
+    /** 主题色来自 Flutter 侧 accentValue（App 的主题色存放在 Dart 设置里，
+     *  Android 资源中并没有 "accent" 这个颜色项，取不到就一直落回旧的硬编码蓝）。 */
+    private fun accentColor(): Int = accent
+
+    private fun withAlpha(color: Int, alpha: Int): Int =
+        Color.argb(alpha, Color.red(color), Color.green(color), Color.blue(color))
+
+    /** 把 tint 按 ratio 掺进 base（返回不带 alpha 的 RGB，alpha 由调用方自己给） */
+    private fun mix(base: Int, tint: Int, ratio: Float): Int {
+        val r = Color.red(base) + (Color.red(tint) - Color.red(base)) * ratio
+        val g = Color.green(base) + (Color.green(tint) - Color.green(base)) * ratio
+        val b = Color.blue(base) + (Color.blue(tint) - Color.blue(base)) * ratio
+        return Color.rgb(r.toInt().coerceIn(0, 255), g.toInt().coerceIn(0, 255), b.toInt().coerceIn(0, 255))
+    }
+
+    private fun isDarkMode(): Boolean = when (theme) {
+        "dark" -> true
+        "light" -> false
+        else -> dark
+    }
+
     private fun toggleExpanded() {
         expanded = !expanded
         applyExpanded()
+        if (expanded) buildTabs()
     }
 
     private fun applyExpanded() {
@@ -214,16 +299,24 @@ class FloatingBall(private val context: Context) {
         c.alpha = opacity
         // 外壳统一在这里画：折叠=正圆（球），展开=圆角卡片。
         // 之前把外壳分散在 applyStyle 里画，调完尺寸就丢——这里单一来源。
+        val darkBg = isDarkMode()
+        val bgBase = if (darkBg) 0xFF161B24.toInt() else 0xFFFFFFFF.toInt()
+        val fg = if (darkBg) 0xFFE8EAF0.toInt() else 0xFF181B24.toInt()
+        titleView?.setTextColor(withAlpha(fg, 235))
+        bodyView?.setTextColor(withAlpha(fg, 225))
         c.background = if (expanded) {
             GradientDrawable().apply {
                 cornerRadius = dp(24).toFloat()
-                setColor(Color.argb((246 * opacity).toInt(), 255, 255, 255))
+                // 背景带一点主题色调（用户：颜色跟随主题色）。
+                // 只掺 14% 主题色，掺多了是 50/50 的浑浊混色，不像"带一点"。
+                setColor(withAlpha(mix(bgBase, accentColor(), 0.14f), (246 * opacity).toInt()))
                 setStroke(dp(1), Color.argb((40 * opacity).toInt(), 20, 24, 40))
             }
         } else {
             GradientDrawable().apply {
                 shape = GradientDrawable.OVAL
-                setColor(Color.argb((250 * opacity).toInt(), 255, 255, 255))
+                // 与展开卡同一套配色：底色掺一点主题色，深色模式下不再是一颗刺眼的纯白球
+                setColor(withAlpha(mix(bgBase, accentColor(), 0.14f), (250 * opacity).toInt()))
                 setStroke(dp(1), Color.argb((46 * opacity).toInt(), 20, 24, 40))
             }
         }
@@ -246,10 +339,21 @@ class FloatingBall(private val context: Context) {
     }
 
     @Synchronized
-    fun show(title: String, answers: String): Boolean {
+    fun show(
+        title: String,
+        answers: String,
+        partsJson: String = "",
+        themeMode: String = "follow",
+        darkMode: Boolean = false,
+        themeAccent: Int = 0xFF4F7CFF.toInt(),
+    ): Boolean {
         if (!hasPermission()) return false
+        theme = themeMode
+        dark = darkMode
+        accent = themeAccent
+        parseParts(partsJson)
         if (card != null) {
-            update(title, answers)
+            update(title, answers, partsJson)
             return true
         }
         val p = WindowManager.LayoutParams(
@@ -261,8 +365,10 @@ class FloatingBall(private val context: Context) {
             PixelFormat.TRANSLUCENT,
         ).apply {
             gravity = Gravity.TOP or Gravity.START
-            x = dp(240)
-            y = dp(420)
+            // 默认挂在屏幕右侧中部：避开顶部设置栏（用户反馈球压住顶栏）
+            val metrics = context.resources.displayMetrics
+            x = metrics.widthPixels - dp(expandedWidthDp()) - dp(12)
+            y = (metrics.heightPixels * 0.42f).toInt()
         }
         val view = buildCard(title, answers)
         try {
@@ -278,19 +384,53 @@ class FloatingBall(private val context: Context) {
     }
 
     @Synchronized
-    fun update(title: String, answers: String) {
+    fun update(title: String, answers: String, partsJson: String = "") {
+        if (partsJson.isNotEmpty()) parseParts(partsJson)
         titleView?.text = title.ifBlank { "E听说助手" }
-        bodyView?.text = answers.ifBlank { "（暂无内容）" }
+        bodyView?.text =
+            if (parts.isNotEmpty()) parts.getOrNull(partIndex)?.second?.ifBlank { "（暂无内容）" }
+            else answers.ifBlank { "（暂无内容）" }
+        buildTabs()
+    }
+
+    /** partsJson: [{"label":"A","text":"..."}, ...] */
+    private fun parseParts(json: String) {
+        parts = emptyList()
+        if (json.isBlank()) return
+        try {
+            val arr = org.json.JSONArray(json)
+            val out = ArrayList<Pair<String, String>>()
+            for (i in 0 until arr.length()) {
+                val o = arr.optJSONObject(i) ?: continue
+                out.add(
+                    Pair(
+                        o.optString("label", ('A' + i).toString()),
+                        o.optString("text", ""),
+                    ),
+                )
+            }
+            parts = out
+            if (partIndex >= out.size) partIndex = 0
+        } catch (_: Throwable) {
+        }
     }
 
     /** 设置页调整外观：球直径(**屏幕像素**) + 不透明度 */
     @Synchronized
-    fun applyStyle(sizePx: Int, opacityValue: Double) {
+    fun applyStyle(
+        sizePx: Int,
+        opacityValue: Double,
+        themeMode: String? = null,
+        themeAccent: Int? = null,
+    ) {
         val density = context.resources.displayMetrics.density.coerceAtLeast(0.75f)
-        ballSizeDp = (sizePx / density).toInt().coerceIn(28, 260)
+        ballSizeDp = (sizePx / density).toInt().coerceIn(20, 120)
         opacity = opacityValue.toFloat().coerceIn(0.4f, 1f)
+        if (themeMode != null) theme = themeMode
+        if (themeAccent != null) accent = themeAccent
         if (card == null) return
         applyExpanded()
+        buildTabs()
     }
 
     @Synchronized

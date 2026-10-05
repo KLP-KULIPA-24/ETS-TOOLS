@@ -101,8 +101,16 @@ class AudioPlayerService extends ChangeNotifier {
   }
 
   Future<void> pause() async => player.pause();
-  Future<void> toggle() async =>
-      player.playing ? player.pause() : player.play();
+  Future<void> toggle() async {
+    if (player.playing) return player.pause();
+    // 播完了再点要能从头重播——justina 播到结尾后 position == duration，
+    // 直接 play() 会被当成"已结束"什么也不做（用户反馈"无法再次播放"）
+    final dur = player.duration;
+    if (dur != null && dur > Duration.zero && player.position >= dur) {
+      await player.seek(Duration.zero);
+    }
+    await player.play();
+  }
   Future<void> seek(double seconds) async =>
       player.seek(Duration(milliseconds: (seconds * 1000).round()));
   Future<void> stop() async {

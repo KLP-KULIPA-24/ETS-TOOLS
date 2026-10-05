@@ -57,10 +57,10 @@ Future<void> showFloatingSettingsSheet(BuildContext context) {
                   ],
                 ),
                 Slider(
-                  value: s.floatingSize.toDouble().clamp(100, 360),
-                  min: 100,
-                  max: 360,
-                  divisions: 26, // 每 10px 一档
+                  value: s.floatingSize.toDouble().clamp(40, 200),
+                  min: 40,
+                  max: 200,
+                  divisions: 16, // 每 10px 一档
                   label: '${s.floatingSize} px',
                   onChanged: (v) => s.setFloatingSize(v.round()),
                 ),
@@ -89,6 +89,22 @@ Future<void> showFloatingSettingsSheet(BuildContext context) {
                   ),
                 ),
                 const SizedBox(height: 4),
+                // 背景配色：跟随主题 / 浅色 / 深色
+                Text(
+                  '悬浮窗配色',
+                  style: TextStyle(fontSize: 12, color: cs.outline),
+                ),
+                const SizedBox(height: 6),
+                SegmentedButton<String>(
+                  segments: const [
+                    ButtonSegment(value: 'follow', label: Text('跟随')),
+                    ButtonSegment(value: 'light', label: Text('浅色')),
+                    ButtonSegment(value: 'dark', label: Text('深色')),
+                  ],
+                  selected: {s.floatingTheme},
+                  onSelectionChanged: (v) => s.setFloatingTheme(v.first),
+                ),
+                const SizedBox(height: 14),
                 // 电脑端：窗口置顶 + 快捷键
                 if (Platform.isWindows) ...[
                   SwitchListTile(

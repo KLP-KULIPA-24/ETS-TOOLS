@@ -31,7 +31,7 @@ const kAgnesLoginUrl = 'https://platform.agnes-ai.cn/';
 const kShizukuApkUrl =
     'https://github.com/RikkaApps/Shizuku/releases/download/v13.6.0/shizuku-v13.6.0.r1086.2650830c-release.apk';
 const kShizukuMirrorUrl =
-    'https://gh.b52m.cn/https://github.com/RikkaApps/Shizuku/releases/download/v13.6.0/shizuku-v13.6.0.r1086.2650830c-release.apk';
+    'https://gh-proxy.org/https://github.com/RikkaApps/Shizuku/releases/download/v13.6.0/shizuku-v13.6.0.r1086.2650830c-release.apk';
 const kShizukuLanzouUrl = 'https://wwblv.lanzoul.com/idVxv4asjhdc';
 const kShizukuPan2Url = 'https://silver.yukaidi.com/s/xxr5tE';
 const kShizukuNetdiskPw = 'ets'; // 蓝奏云提取码
@@ -331,8 +331,9 @@ class SettingsService extends ChangeNotifier {
     grade = _sp.getString('grade') ?? '';
     region = _sp.getString('region') ?? '';
     // 旧版本存的是 dp 值（<100），按新的像素口径夹回区间
-    floatingSize = (_sp.getInt('floatingSize') ?? 160).clamp(100, 360);
-    floatingOpacity = _sp.getDouble('floatingOpacity') ?? 0.96;
+    floatingSize = (_sp.getInt('floatingSize') ?? 100).clamp(40, 200);
+    floatingOpacity = _sp.getDouble('floatingOpacity') ?? 0.95;
+    floatingTheme = _sp.getString('floatingTheme') ?? 'follow';
     alwaysOnTop = _sp.getBool('alwaysOnTop') ?? false;
     hotkeyToggle = _sp.getBool('hotkeyToggle') ?? true;
     useRoot = _sp.getBool('useRoot') ?? true;
@@ -530,6 +531,8 @@ class SettingsService extends ChangeNotifier {
   void setFollowHighlight(bool v) {
     followHighlight = v;
     _sp.setBool('followHighlight', v);
+    // 漏掉通知 = 开关拨了界面不动，得滚动一下才生效（用户反馈）
+    notifyListeners();
   }
 
   void setTtsVoiceIndex(int i) {
@@ -547,6 +550,7 @@ class SettingsService extends ChangeNotifier {
   void setExtractModePref(String name) {
     extractModePref = name;
     _sp.setString('extractModePref', name);
+    notifyListeners(); // 同上：提取通道卡上的选中态要立刻变
   }
 
   void setLayoutMode(UiLayoutMode m) {
@@ -725,14 +729,44 @@ class SettingsService extends ChangeNotifier {
   bool get isGuangdongSenior =>
       grade.isNotEmpty && !isJunior && region.contains('广东');
 
+  /// 数据侧 engine_area（拼音，如 guangdong）与设置地区（中文，如 广东东莞）
+  /// 是否同一省份。**数据没标注 engine_area 时不判**（视为匹配，不阻断排版）——
+  /// 用户定的口径：有就比对，没有就不判。
+  bool matchesDataArea(String? engineArea) {
+    final area = (engineArea ?? '').trim().toLowerCase();
+    if (area.isEmpty) return true;
+    final r = region.trim();
+    if (r.isEmpty) return false;
+    for (final e in _provincePinyin.entries) {
+      if (r.contains(e.key)) return area.contains(e.value);
+    }
+    return true; // 设置里的省份认不出 → 不判
+  }
+
+  /// 省级行政区 → 拼音（数据 res.json 的 engine_area 用拼音标注）
+  static const _provincePinyin = <String, String>{
+    '北京': 'beijing', '天津': 'tianjin', '上海': 'shanghai', '重庆': 'chongqing',
+    '河北': 'hebei', '山西': 'shanxi', '辽宁': 'liaoning', '吉林': 'jilin',
+    '黑龙江': 'heilongjiang', '江苏': 'jiangsu', '浙江': 'zhejiang', '安徽': 'anhui',
+    '福建': 'fujian', '江西': 'jiangxi', '山东': 'shandong', '河南': 'henan',
+    '湖北': 'hubei', '湖南': 'hunan', '广东': 'guangdong', '海南': 'hainan',
+    '四川': 'sichuan', '贵州': 'guizhou', '云南': 'yunnan', '陕西': 'shaanxi',
+    '甘肃': 'gansu', '青海': 'qinghai', '台湾': 'taiwan', '内蒙古': 'neimenggu',
+    '广西': 'guangxi', '西藏': 'xizang', '宁夏': 'ningxia', '新疆': 'xinjiang',
+    '香港': 'xianggang', '澳门': 'aomen',
+  };
+
   // ---- 作业管理：已完成 / 已删除（按目录 key）----
-  /// 悬浮球直径，**单位是屏幕像素**（100 小 ~ 360 大，默认 160）。
+  /// 悬浮球直径，**单位是屏幕像素**：40 小 / 100 中（默认） / 200 大。
   /// 用 px 而不是 dp：56dp 在 2x 屏上就是 112px，用户看到的就是"100 的大小"，
   /// 按 dp 给值会一直对不上眼。
-  int floatingSize = 160;
+  int floatingSize = 100;
 
   /// 悬浮窗不透明度 0.5~1.0
   double floatingOpacity = 0.96;
+
+  /// 悬浮窗配色：follow 跟随主题 / light 浅色 / dark 深色
+  String floatingTheme = 'follow';
 
   /// 电脑端窗口置顶
   bool alwaysOnTop = false;
@@ -741,7 +775,7 @@ class SettingsService extends ChangeNotifier {
   bool hotkeyToggle = true;
 
   void setFloatingSize(int v) {
-    floatingSize = v.clamp(100, 360);
+    floatingSize = v.clamp(40, 200);
     _sp.setInt('floatingSize', floatingSize);
     notifyListeners();
     _applyFloating();
@@ -757,6 +791,13 @@ class SettingsService extends ChangeNotifier {
   void setFloatingOpacity(double v) {
     floatingOpacity = v.clamp(0.4, 1.0);
     _sp.setDouble('floatingOpacity', floatingOpacity);
+    notifyListeners();
+    _applyFloating();
+  }
+
+  void setFloatingTheme(String v) {
+    floatingTheme = v;
+    _sp.setString('floatingTheme', v);
     notifyListeners();
     _applyFloating();
   }

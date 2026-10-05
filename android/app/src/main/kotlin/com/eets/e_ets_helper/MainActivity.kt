@@ -86,25 +86,44 @@ class MainActivity : FlutterActivity() {
                         val title = call.argument<String>("title") ?: ""
                         val answers = call.argument<String>("answers") ?: ""
                         val size = call.argument<Int>("size") ?: 0
-                        val opacity = call.argument<Double>("opacity") ?: 0.96
+                        val opacity = call.argument<Double>("opacity") ?: 0.95
+                        val partsJson = call.argument<String>("parts") ?: ""
+                        val theme = call.argument<String>("theme") ?: "follow"
+                        val accent = call.argument<Int>("accent") ?: 0xFF4F7CFF.toInt()
+                        val darkMode =
+                            resources.configuration.uiMode and
+                                android.content.res.Configuration.UI_MODE_NIGHT_MASK ==
+                                android.content.res.Configuration.UI_MODE_NIGHT_YES
                         runOnUiThread {
                             if (size > 0) {
-                                floating.applyStyle(size, opacity)
+                                floating.applyStyle(size, opacity, theme, accent)
                             }
                             if (!floating.hasPermission()) {
                                 // 未授权：直接拉起系统"显示在其他应用上层"设置页
                                 floating.openPermissionSettings()
                                 result.success("noPermission")
                             } else {
-                                result.success(if (floating.show(title, answers)) "ok" else "failed")
+                                result.success(
+                                    if (floating.show(
+                                            title,
+                                            answers,
+                                            partsJson,
+                                            theme,
+                                            darkMode,
+                                            accent,
+                                        )
+                                    ) "ok"
+                                    else "failed",
+                                )
                             }
                         }
                     }
                     "floatingUpdate" -> {
                         val title = call.argument<String>("title") ?: ""
                         val answers = call.argument<String>("answers") ?: ""
+                        val partsJson = call.argument<String>("parts") ?: ""
                         runOnUiThread {
-                            floating.update(title, answers)
+                            floating.update(title, answers, partsJson)
                             result.success("ok")
                         }
                     }
@@ -116,9 +135,11 @@ class MainActivity : FlutterActivity() {
                     }
                     "floatingApply" -> {
                         val w = call.argument<Int>("size") ?: 44
-                        val op = call.argument<Double>("opacity") ?: 0.96
+                        val op = call.argument<Double>("opacity") ?: 0.95
+                        val theme = call.argument<String>("theme")
+                        val accent = call.argument<Int>("accent")
                         runOnUiThread {
-                            floating.applyStyle(w, op)
+                            floating.applyStyle(w, op, theme, accent)
                             result.success("ok")
                         }
                     }
