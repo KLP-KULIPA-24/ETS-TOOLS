@@ -101,4 +101,18 @@ class FloatingBridge {
       await FlutterOverlayWindow.closeOverlay();
     } catch (_) {}
   }
+
+  /// 顶栏按钮的开关切换：显示中→收起；隐藏中→显示。
+  /// 返回 true = 切换后是显示态。
+  static Future<bool> toggleAndroidOverlay() async {
+    try {
+      if (await FlutterOverlayWindow.isActive()) {
+        await hideAndroidOverlay();
+        return false;
+      }
+      return await showAndroidOverlay();
+    } catch (_) {
+      return false;
+    }
+  }
 }

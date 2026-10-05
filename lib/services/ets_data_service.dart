@@ -372,8 +372,11 @@ class EtsDataService extends ChangeNotifier {
         }
         return b.mtime.compareTo(a.mtime);
       });
-      // Part A/B/C 标识：按组内顺序分配
-      if (list.length > 1) {
+      // Part A/B/C 标识：按组内顺序分配。
+      // 这套"模仿朗读/角色扮演/故事复述"排版识别切块是广东高中卷特有的
+      // （用户明确：地区含广东 + 高一/高二/高三才启用）——
+      // 其他地区/学段的数据结构可能不同，不套用这套标签
+      if (SettingsService.I.isGuangdongSenior && list.length > 1) {
         for (var i = 0; i < list.length; i++) {
           if (list[i].partLabel == null) {
             list[i] = list[i].copyWith(

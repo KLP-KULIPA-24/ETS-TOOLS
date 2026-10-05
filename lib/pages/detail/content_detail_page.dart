@@ -1,4 +1,3 @@
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 
@@ -30,12 +29,18 @@ class _ContentDetailPageState extends State<ContentDetailPage> {
   // 互动教程锚点
   final _kAiMenu = GlobalKey();
   final _kHideAnswers = GlobalKey();
-  final _kFloating = GlobalKey();
   final _kMore = GlobalKey();
 
   @override
   void initState() {
     super.initState();
+    // 悬浮窗按钮在壳层顶栏（全局），详情页只负责把当前作业的
+    // 答案同步进数据桥——顶栏按钮一按，悬浮球展示的就是这份内容
+    FloatingBridge.set(
+      title: widget.entry.title,
+      answers: _plainAnswers,
+      stid: widget.entry.content?.stid ?? widget.entry.paper?.tzid ?? '',
+    );
     final stid = widget.entry.content?.stid;
     if (stid != null) {
       for (final a in AiAction.values) {
@@ -181,15 +186,8 @@ class _ContentDetailPageState extends State<ContentDetailPage> {
               ),
             ],
           ),
-          // 悬浮窗（仅 Android 系统悬浮球；Windows 已下线该功能）
-          // 用户指定位置：右上角，紧挨「本页说明」按钮左侧
-          if (Platform.isAndroid)
-            IconButton(
-              key: _kFloating,
-              tooltip: '悬浮窗展示答案',
-              onPressed: () => _showFloating(),
-              icon: const Icon(Icons.picture_in_picture_alt_rounded),
-            ),
+          // 悬浮窗按钮已上移到壳层顶栏（教程按钮左侧），对全部页面生效；
+          // 详情页只负责把当前作业的答案同步给悬浮窗
           IconButton(
             tooltip: '本页说明',
             icon: const Icon(Icons.help_outline_rounded),
@@ -211,9 +209,9 @@ class _ContentDetailPageState extends State<ContentDetailPage> {
     ),
     TourStep(_kHideAnswers, '背题模式', '一键隐藏全部答案用于自测，点任意模糊处或再点一次即可恢复。'),
     TourStep(
-      _kFloating,
+      null,
       '悬浮窗展示答案',
-      '把答案推到系统悬浮球：点右上角悬浮球收起/展开，'
+      '打开作业后，点壳层顶栏右上角的悬浮窗按钮即可把答案推到系统悬浮球；'
           '切到别的窗口也能随时看答案。',
     ),
     TourStep(_kMore, '模拟考场', '按原软件流程复现考试：播放 → 倒计时 → 录音 → 回放，可中途跳过。'),
@@ -224,28 +222,6 @@ class _ContentDetailPageState extends State<ContentDetailPage> {
           '有逐句时间轴的题型可点句子右侧 ▶ 只听该句区间。',
     ),
   ];
-
-  Future<void> _showFloating() async {
-    await FloatingBridge.set(
-      title: widget.entry.title,
-      answers: _plainAnswers,
-      stid: widget.entry.content?.stid ?? widget.entry.paper?.tzid ?? '',
-    );
-    if (!Platform.isAndroid) return; // Windows 已取消悬浮窗
-    final ok = await FloatingBridge.showAndroidOverlay();
-    if (!ok && mounted) {
-      // requestPermission() 失败时插件已尝试跳系统设置；这里给出明确路径指引
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          duration: Duration(seconds: 8),
-          content: Text(
-            '未获得悬浮窗权限：请在系统「设置 → 应用 → 特殊应用权限 → 显示在其他应用上层」'
-            '允许本应用后，再点一次悬浮窗按钮',
-          ),
-        ),
-      );
-    }
-  }
 
   /// 顶部 AI 菜单 → 结果面板（流式，支持多模型故障切换）
   Future<void> _openAiSheet(BuildContext context, String action) async {

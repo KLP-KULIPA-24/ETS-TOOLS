@@ -708,6 +708,17 @@ class SettingsService extends ChangeNotifier {
 
   bool get isJunior => grade == '初一' || grade == '初二' || grade == '初三';
 
+  /// 考试信息是否已填写（年级 + 地区）。
+  /// 未填时作业区不解析不显示，刷新只提示先去补全（用户明确要求：
+  /// 识别模式按年级/地区匹配，信息不全就不该猜）。
+  bool get examInfoReady =>
+      grade.trim().isNotEmpty && region.trim().isNotEmpty;
+
+  /// 广东高中排版识别模式：Part A/B/C（模仿朗读/角色扮演/故事复述）
+  /// 切块是广东高中卷特有的——地区含"广东"且年级为高中（非初中）才启用
+  bool get isGuangdongSenior =>
+      grade.isNotEmpty && !isJunior && region.contains('广东');
+
   // ---- 作业管理：已完成 / 已删除（按目录 key）----
   Set<String> get completedDirs =>
       (_sp.getStringList('completedDirs') ?? []).toSet();

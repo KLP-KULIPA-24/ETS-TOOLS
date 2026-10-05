@@ -13,6 +13,7 @@ import '../pages/ai/ai_chat_page.dart';
 import '../pages/homework/homework_page.dart';
 import '../pages/settings/settings_page.dart';
 import '../services/ambient.dart';
+import '../services/floating_bridge.dart';
 import '../services/settings_service.dart';
 import '../services/update_service.dart';
 import '../widgets/glass.dart';
@@ -146,7 +147,12 @@ class _HomeShellState extends State<HomeShell> {
           logo: _logoBox(28, 9),
           title: 'E听说助手',
           subtitle: titles[_index],
-          actions: [_helpButton(context)],
+          // 悬浮窗开关在教程按钮左边（用户指定位置），全局生效——
+          // 各详情页打开时已把答案同步进 FloatingBridge
+          actions: [
+            if (Platform.isAndroid) _floatingButton(context),
+            _helpButton(context),
+          ],
         );
 
         return Scaffold(
@@ -220,6 +226,27 @@ class _HomeShellState extends State<HomeShell> {
     tooltip: '使用教程',
     icon: const Icon(Icons.help_outline_rounded),
     onPressed: () => TourHub.showHelpSheet(context),
+  );
+
+  /// 悬浮窗开关：显示中→收起；隐藏中→把数据桥里的答案弹成悬浮球
+  Widget _floatingButton(BuildContext context) => IconButton(
+    tooltip: '悬浮窗展示答案',
+    icon: const Icon(Icons.picture_in_picture_alt_rounded),
+    onPressed: () async {
+      final shown = await FloatingBridge.toggleAndroidOverlay();
+      if (!context.mounted) return;
+      if (!shown) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            duration: Duration(seconds: 8),
+            content: Text(
+              '未获得悬浮窗权限：请在系统「设置 → 应用 → 特殊应用权限 → '
+              '显示在其他应用上层」允许本应用后，再点一次悬浮窗按钮',
+            ),
+          ),
+        );
+      }
+    },
   );
 
   Widget _buildRail(BuildContext context, bool armed) {
@@ -428,8 +455,10 @@ class _FloatingNavBarState extends State<_FloatingNavBar>
                 animation: _grow,
                 builder: (context, _) {
                   final g = Curves.easeOutCubic.transform(_grow.value);
+                  // 垂直方向从栏内 7px 涨到 -6px：胶囊必须真正高出玻璃栏
+                  // 上下边缘（用户反馈"也没超过菜单栏啊，要涨出去"）
+                  final vpad = lerpDouble(7, -6, g)!;
                   final hpad = lerpDouble(4, -2, g)!;
-                  final vpad = lerpDouble(7, 2, g)!;
                   final grow = lerpDouble(0, 12, g)!;
                   return Positioned(
                     left: _x + hpad,
