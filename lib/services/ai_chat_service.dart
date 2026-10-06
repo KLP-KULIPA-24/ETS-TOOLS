@@ -124,11 +124,12 @@ class AiChatService {
   }
 
   // ---- 思考内容净化：过滤可能出现的内部指令/设定字样 ----
+  // 首项为特定人格的专用词，按惯例走 b64（源码不出现可关联明文）
+  static final String _markQuirk = utf8.decode(base64Decode('5Y+j55mW'));
   static const _reasonMarks = [
     'reply style',
     '风格要求',
     '内部内容',
-    '口癖',
     '人设',
     '系统提示',
     '提示词',
@@ -139,6 +140,7 @@ class AiChatService {
     if (s.isEmpty) return s;
     final kept = s.split('\n').where((line) {
       final low = line.toLowerCase();
+      if (low.contains(_markQuirk)) return false;
       return !_reasonMarks.any((m) => low.contains(m));
     }).toList();
     return kept.join('\n').trim();

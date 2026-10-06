@@ -40,6 +40,16 @@ class FloatingBall(private val context: Context) {
     private var tabsRow: LinearLayout? = null
     private var partIndex = 0
 
+    /** 作业切换菜单（卡片内下拉，避免非聚焦窗口弹不出系统菜单） */
+    private var menuBox: LinearLayout? = null
+    private var groupTitles: List<String> = emptyList()
+
+    /** 当前标题（菜单里高亮"正在看的那份"用） */
+    private var currentTitle = ""
+
+    /** 三点菜单选中某份作业 → 回调 Dart 装载对应内容 */
+    var onPickGroup: ((Int) -> Unit)? = null
+
     /** 分段内容（label + text），A/B/C 一排按钮 */
     private var parts: List<Pair<String, String>> = emptyList()
 
@@ -152,6 +162,17 @@ class FloatingBall(private val context: Context) {
         head.addView(t, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
             leftMargin = dp(8)
         })
+        // 右上角三点：展开内置作业切换菜单（多份作业才显示）
+        if (groupTitles.size > 1) {
+            val more = TextView(context).apply {
+                text = "⋮"
+                textSize = 17f
+                gravity = Gravity.CENTER
+                setPadding(dp(8), 0, dp(4), dp(2))
+                setOnClickListener { toggleMenu() }
+            }
+            head.addView(more, LinearLayout.LayoutParams(dp(30), dp(30)))
+        }
         box.addView(head)
 
         // A/B/C 透明按钮条：点哪段看哪段（用户要求）
@@ -164,6 +185,17 @@ class FloatingBall(private val context: Context) {
             LinearLayout.LayoutParams.MATCH_PARENT,
             LinearLayout.LayoutParams.WRAP_CONTENT,
         ).apply { topMargin = dp(8) })
+
+        // 作业切换菜单（默认收起）：做在卡片内部，非聚焦窗口也能点
+        val menu = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            visibility = View.GONE
+        }
+        menuBox = menu
+        box.addView(menu, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+        ).apply { topMargin = dp(6) })
 
         val scroll = ScrollView(context).apply {
             isVerticalScrollBarEnabled = false
@@ -274,6 +306,65 @@ class FloatingBall(private val context: Context) {
 
     /** 主题色来自 Flutter 侧 accentValue（App 的主题色存放在 Dart 设置里，
      *  Android 资源中并没有 "accent" 这个颜色项，取不到就一直落回旧的硬编码蓝）。 */
+    /** 作业切换菜单开合；展开时按最新名单重建 */
+    private fun toggleMenu() {
+        val menu = menuBox ?: return
+        if (menu.visibility == View.VISIBLE) {
+            menu.visibility = View.GONE
+            return
+        }
+        buildMenu()
+        menu.visibility = View.VISIBLE
+    }
+
+    /** 重建作业菜单：当前作业高亮，点谁换谁（换完自动收起） */
+    private fun buildMenu() {
+        val menu = menuBox ?: return
+        menu.removeAllViews()
+        if (groupTitles.isEmpty()) return
+        val darkBg = isDarkMode()
+        val fg = if (darkBg) 0xFFE8EAF0.toInt() else 0xFF181B24.toInt()
+        for ((i, name) in groupTitles.withIndex()) {
+            val row = TextView(context).apply {
+                text = name
+                textSize = 13f
+                maxLines = 1
+                ellipsize = android.text.TextUtils.TruncateAt.END
+                setPadding(dp(10), dp(7), dp(10), dp(7))
+                val current = currentTitle == name
+                setTextColor(if (current) withAlpha(accentColor(), 255) else withAlpha(fg, 220))
+                background = GradientDrawable().apply {
+                    cornerRadius = dp(8).toFloat()
+                    if (current) setColor(withAlpha(accentColor(), 34))
+                }
+                setOnClickListener {
+                    menu.visibility = View.GONE
+                    if (!current) onPickGroup?.invoke(i)
+                }
+            }
+            menu.addView(row, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ))
+        }
+    }
+
+    /** groupsJson: ["作业名", ...]（floatingShow 随包下发） */
+    fun setGroups(json: String?) {
+        groupTitles = emptyList()
+        if (json.isNullOrBlank()) return
+        try {
+            val arr = org.json.JSONArray(json)
+            val out = ArrayList<String>()
+            for (i in 0 until arr.length()) {
+                val t = arr.optString(i, "")
+                if (t.isNotBlank()) out.add(t)
+            }
+            groupTitles = out
+        } catch (_: Throwable) {
+        }
+    }
+
     private fun accentColor(): Int = accent
 
     private fun withAlpha(color: Int, alpha: Int): Int =
@@ -303,28 +394,32 @@ class FloatingBall(private val context: Context) {
         val c = card ?: return
         ballView?.visibility = if (expanded) View.GONE else View.VISIBLE
         expandedBox?.visibility = if (expanded) View.VISIBLE else View.GONE
-        c.alpha = opacity
+        // 不再对整卡设 View.alpha：那会把文字一起变透明（设置 0.5 时实际是
+        // 背景×文字双重叠加），用户看到的就是"太透明、没背景"。
+        // 不透明度只作用于下面的背景 drawable，文字恒定实色。
         // 外壳统一在这里画：折叠=正圆（球），展开=圆角卡片。
         // 之前把外壳分散在 applyStyle 里画，调完尺寸就丢——这里单一来源。
         val darkBg = isDarkMode()
         val bgBase = if (darkBg) 0xFF161B24.toInt() else 0xFFFFFFFF.toInt()
         val fg = if (darkBg) 0xFFE8EAF0.toInt() else 0xFF181B24.toInt()
-        titleView?.setTextColor(withAlpha(fg, 235))
-        bodyView?.setTextColor(withAlpha(fg, 225))
+        titleView?.setTextColor(withAlpha(fg, 245))
+        bodyView?.setTextColor(withAlpha(fg, 238))
+        // 背景不透明度下限 62%：再低内容就压不住底下滚动的页面了
+        val bgAlpha = (255 * opacity.coerceAtLeast(0.62f)).toInt()
         c.background = if (expanded) {
             GradientDrawable().apply {
                 cornerRadius = dp(24).toFloat()
                 // 背景带一点主题色调（用户：颜色跟随主题色）。
                 // 只掺 14% 主题色，掺多了是 50/50 的浑浊混色，不像"带一点"。
-                setColor(withAlpha(mix(bgBase, accentColor(), 0.14f), (246 * opacity).toInt()))
-                setStroke(dp(1), Color.argb((40 * opacity).toInt(), 20, 24, 40))
+                setColor(withAlpha(mix(bgBase, accentColor(), 0.14f), bgAlpha))
+                setStroke(dp(1), Color.argb((70 * opacity).toInt(), 20, 24, 40))
             }
         } else {
             GradientDrawable().apply {
                 shape = GradientDrawable.OVAL
                 // 与展开卡同一套配色：底色掺一点主题色，深色模式下不再是一颗刺眼的纯白球
-                setColor(withAlpha(mix(bgBase, accentColor(), 0.14f), (250 * opacity).toInt()))
-                setStroke(dp(1), Color.argb((46 * opacity).toInt(), 20, 24, 40))
+                setColor(withAlpha(mix(bgBase, accentColor(), 0.14f), (252 * opacity).toInt()))
+                setStroke(dp(1), Color.argb((60 * opacity).toInt(), 20, 24, 40))
             }
         }
         val pad = if (expanded) dp(14) else dp(5)
@@ -359,6 +454,7 @@ class FloatingBall(private val context: Context) {
         themeMode: String = "follow",
         darkMode: Boolean = false,
         themeAccent: Int = 0xFF4F7CFF.toInt(),
+        groupsJson: String = "",
     ): Boolean {
         // 不在开头用 hasPermission() 短路：canDrawOverlays() 在部分 ROM 上会**误报 false**，
         // 一短路就永远走不到 addView，表现为"正式版悬浮窗点了没反应"。
@@ -366,6 +462,8 @@ class FloatingBall(private val context: Context) {
         theme = themeMode
         dark = darkMode
         accent = themeAccent
+        currentTitle = title
+        setGroups(groupsJson)
         parseParts(partsJson)
         if (card != null) {
             update(title, answers, partsJson)
@@ -407,6 +505,7 @@ class FloatingBall(private val context: Context) {
     @Synchronized
     fun update(title: String, answers: String, partsJson: String = "") {
         if (partsJson.isNotEmpty()) parseParts(partsJson)
+        currentTitle = title
         titleView?.text = title.ifBlank { "E听说助手" }
         bodyView?.text =
             if (parts.isNotEmpty()) parts.getOrNull(partIndex)?.second?.ifBlank { "（暂无内容）" }

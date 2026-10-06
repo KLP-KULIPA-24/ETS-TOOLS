@@ -4,6 +4,7 @@
 library;
 
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -11,6 +12,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart';
 
 import 'achievements.dart';
+import 'ets_data_service.dart';
+import 'floating_parts.dart';
 import 'settings_service.dart';
 
 class FloatingBridge {
@@ -23,6 +26,41 @@ class FloatingBridge {
 
   /// 分段内容（A/B/C…）：给原生悬浮窗渲染成一排按钮
   static List<Map<String, dynamic>> parts = const [];
+
+  /// 可切换的作业名单（悬浮窗右上角三点菜单）：取自当前扫描分组
+  static List<String> get groupTitles =>
+      EtsDataService.computeGroups(EtsDataService.I.entries)
+          .map((g) => g.displayName)
+          .toList();
+
+  /// 原生侧回调只注册一次：悬浮窗三点菜单选作业 → [pickGroup]
+  static bool _handlerReady = false;
+  static void _ensureHandler() {
+    if (_handlerReady) return;
+    _handlerReady = true;
+    _channel.setMethodCallHandler((call) async {
+      if (call.method == 'floatingPickGroup') {
+        final i = (call.arguments as num?)?.toInt() ?? -1;
+        await pickGroup(i);
+      }
+      return null;
+    });
+  }
+
+  /// 悬浮窗里点了第 index 份作业：把那份套题装进数据桥并刷新悬浮窗
+  static Future<void> pickGroup(int index) async {
+    final groups = EtsDataService.computeGroups(EtsDataService.I.entries);
+    if (index < 0 || index >= groups.length) return;
+    final g = groups[index];
+    final ps = partsOfGroup(g);
+    await set(
+      title: g.displayName,
+      answers: [for (final p in ps) p.text].join('\n\n'),
+      stid: g.uid,
+      parts: [for (final p in ps) {'label': p.label, 'text': p.text}],
+    );
+    if (Platform.isAndroid) await updateAndroidOverlay();
+  }
 
   /// 主界面 → 悬浮窗（Windows 内存 / Android 持久化）
   static Future<void> set({
@@ -66,6 +104,7 @@ class FloatingBridge {
   /// 未授权时原生侧直接拉起系统"显示在其他应用上层"设置页，这里返回 false。
   static Future<bool> showAndroidOverlay() async {
     Achievements.unlock('floating');
+    _ensureHandler();
     try {
       // 尺寸/透明度随 show 一起下发：刚打开就用设置里的值
       final r = await _channel.invokeMethod<String>('floatingShow', {
@@ -76,6 +115,7 @@ class FloatingBridge {
         'opacity': SettingsService.I.floatingOpacity,
         'theme': SettingsService.I.floatingTheme,
         'accent': SettingsService.I.accentValue,
+        'groups': jsonEncode(groupTitles),
       });
       return r == 'ok';
     } catch (e) {
@@ -115,6 +155,7 @@ class FloatingBridge {
         return (true, false);
       }
       Achievements.unlock('floating');
+      _ensureHandler();
       // 尺寸/透明度随 show 一起下发：刚打开就用设置里的值
       final r = await _channel.invokeMethod<String>('floatingShow', {
         'title': title,
@@ -124,6 +165,7 @@ class FloatingBridge {
         'opacity': SettingsService.I.floatingOpacity,
         'theme': SettingsService.I.floatingTheme,
         'accent': SettingsService.I.accentValue,
+        'groups': jsonEncode(groupTitles),
       });
       return (r == 'ok', r == 'ok');
     } catch (_) {

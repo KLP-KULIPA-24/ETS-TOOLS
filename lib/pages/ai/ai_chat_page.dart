@@ -628,7 +628,7 @@ class _AiChatPageState extends State<AiChatPage> {
 
   /// 无可用模型时的本地失控回复（逐字流出，可停止/打断）
   Future<void> _ambientReply() async {
-    // 本地回复也分档：这条消息提到名字 → 破防池，否则冷静嘴硬池
+    // 本地回复也分档：这条消息提到名字 → 强反应池，否则冷静嘴硬池
     final said = _ctrl.text.trim();
     final line = Ambient.I.pickCannedFor(said);
     setState(() {

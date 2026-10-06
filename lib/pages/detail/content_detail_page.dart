@@ -5,7 +5,9 @@ import 'package:flutter/material.dart';
 
 import '../../models/ets_models.dart';
 import '../../services/ai_service.dart';
+import '../../services/ets_data_service.dart';
 import '../../services/floating_bridge.dart';
+import '../../services/floating_parts.dart';
 import '../../widgets/ai_panel.dart';
 import '../ai/ai_chat_page.dart';
 import '../homework/exam_sim_page.dart';
@@ -38,11 +40,14 @@ class _ContentDetailPageState extends State<ContentDetailPage> {
     super.initState();
     // 悬浮窗按钮在壳层顶栏（全局），详情页只负责把当前作业的
     // 答案同步进数据桥——顶栏按钮一按，悬浮球展示的就是这份内容；
-    // 悬浮球已开着时同步刷新显示内容
+    // 悬浮球已开着时同步刷新显示内容。
+    // 分段（A/B/C）必须一并传：set 的 parts 缺省是空列表，
+    // 早先这里不传会把分组页设置的分段清掉，悬浮窗顶部切换随之消失。
     FloatingBridge.set(
       title: widget.entry.title,
       answers: _plainAnswers,
       stid: widget.entry.content?.stid ?? widget.entry.paper?.tzid ?? '',
+      parts: _floatingPartsForEntry(),
     ).then((_) {
       if (Platform.isAndroid) FloatingBridge.updateAndroidOverlay();
     });
@@ -61,6 +66,26 @@ class _ContentDetailPageState extends State<ContentDetailPage> {
   String get _plainAnswers => widget.entry.content != null
       ? TypedContentView.plainAnswerText(widget.entry.content!)
       : widget.entry.title;
+
+  /// 当前作业所属套题的 A/B/C 分段（传给悬浮窗顶部切换）。
+  /// 单条作业没有分段，返回空——悬浮窗自然不显示切换条。
+  List<Map<String, dynamic>> _floatingPartsForEntry() {
+    final siblings = EtsDataService.I.entries
+        .where((e) => e.uid == widget.entry.uid)
+        .toList();
+    if (siblings.length < 2) return const [];
+    try {
+      final groups = EtsDataService.computeGroups(siblings);
+      for (final g in groups) {
+        if (g.entries.any((e) => e.dir == widget.entry.dir)) {
+          return [
+            for (final p in partsOfGroup(g)) {'label': p.label, 'text': p.text},
+          ];
+        }
+      }
+    } catch (_) {}
+    return const [];
+  }
 
   @override
   Widget build(BuildContext context) {

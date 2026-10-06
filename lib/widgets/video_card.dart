@@ -56,12 +56,12 @@ class _VideoCardState extends State<VideoCard> {
       }
     };
     AudioPlayerService.I.addListener(_audioWatch!);
-    if (widget.autoPlay) {
-      _loaded = true;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _core.open(widget.source);
-      });
-    }
+    // 无论是否自动播放都先加载：initialize 后就有首帧画面，
+    // 不再是"打开一片黑，点了才出图"（用户反馈）
+    _loaded = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _core.open(widget.source, autoplay: widget.autoPlay);
+    });
   }
 
   VoidCallback? _audioWatch;
@@ -74,9 +74,9 @@ class _VideoCardState extends State<VideoCard> {
   }
 
   Future<void> _toggle() async {
+    // 视频开播前先停音频（互斥）
+    await AudioPlayerService.I.stop();
     if (!_loaded) {
-      // 视频开播前先停音频（互斥）
-      await AudioPlayerService.I.stop();
       setState(() {
         _loaded = true;
         _showBar = true;
@@ -231,7 +231,9 @@ abstract class _Core extends ChangeNotifier {
   Duration duration = Duration.zero;
   double rate = 1.0;
 
-  Future<void> open(String src);
+  /// autoplay=false：只初始化到首帧（封面态），不播——
+  /// 用户要求打开视频先看到画面，而不是黑屏等点击
+  Future<void> open(String src, {bool autoplay = true});
   Future<void> toggle();
   Future<void> pause();
   Future<void> seek(double sec);
@@ -275,8 +277,9 @@ class _MkCore extends _Core {
   }
 
   @override
-  Future<void> open(String src) =>
-      _player.open(Media(src), play: true).then((_) {});
+  @override
+  Future<void> open(String src, {bool autoplay = true}) =>
+      _player.open(Media(src), play: autoplay).then((_) {});
 
   @override
   Future<void> toggle() => _player.playOrPause();
@@ -317,13 +320,16 @@ class _VpCore extends _Core {
   }
 
   @override
-  Future<void> open(String src) async {
+  Future<void> open(String src, {bool autoplay = true}) async {
     final c = VideoPlayerController.file(File(src));
     _c = c;
     c.addListener(_sync);
     await c.initialize();
+    // 停在首帧当封面：initialize 后纹理就有画面，不播也不黑屏
+    await c.seekTo(Duration.zero);
+    await c.pause();
     notifyListeners();
-    await c.play();
+    if (autoplay) await c.play();
   }
 
   @override

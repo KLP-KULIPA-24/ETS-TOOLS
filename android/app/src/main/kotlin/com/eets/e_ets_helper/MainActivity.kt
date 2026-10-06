@@ -43,6 +43,9 @@ class MainActivity : FlutterActivity() {
     private var pendingSafResult: MethodChannel.Result? = null
     private val floating by lazy { FloatingBall(this) }
 
+    /** 悬浮窗回程通道：三点菜单选作业时回调 Dart 的 pickGroup */
+    private var shellChannel: MethodChannel? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Shizuku.addRequestPermissionResultListener(shizukuListener)
@@ -78,8 +81,10 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
-            .setMethodCallHandler { call, result ->
+        // 通道引用留给悬浮窗回程调用（三点菜单选作业 → Dart pickGroup）
+        shellChannel =
+            MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).apply {
+                setMethodCallHandler { call, result ->
                 when (call.method) {
                     // ---- 原生悬浮窗（可拖动的小球，点开展开答案卡）----
                     "floatingShow" -> {
@@ -100,6 +105,11 @@ class MainActivity : FlutterActivity() {
                             resources.configuration.uiMode and
                                 android.content.res.Configuration.UI_MODE_NIGHT_MASK ==
                                 android.content.res.Configuration.UI_MODE_NIGHT_YES
+                        val groupsJson = call.argument<String>("groups") ?: ""
+                        // 三点菜单选作业 → 通知 Dart 装载对应内容（回程走 shellChannel）
+                        floating.onPickGroup = { i ->
+                            shellChannel?.invokeMethod("floatingPickGroup", i)
+                        }
                         runOnUiThread {
                             if (size > 0) {
                                 floating.applyStyle(size, opacity, theme, accent)
@@ -114,6 +124,7 @@ class MainActivity : FlutterActivity() {
                                 theme,
                                 darkMode,
                                 accent,
+                                groupsJson,
                             )
                             if (ok) {
                                 result.success("ok")
@@ -284,6 +295,7 @@ class MainActivity : FlutterActivity() {
                         }.start()
                     }
                     else -> result.notImplemented()
+                }
                 }
             }
     }

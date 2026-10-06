@@ -62,17 +62,38 @@ List<FloatingPart> partsOfGroup(HomeworkGroup group) {
         // 模仿朗读：朗读原文
         body = _clean(c.text);
       case EtsStructure.threeQ5A:
-        // 角色扮演：3 问的英文问题 + 5 答里最短的参考答案
-        final asks = c.questions
-            .map((q) => q.ask)
-            .where((t) => t.trim().isNotEmpty)
-            .map(_clean)
-            .toList();
-        final ans = _shortest(c.stdAnswers.map((a) => a.value).toList());
-        body = [
-          if (asks.isNotEmpty) asks.join('\n'),
-          if (ans.isNotEmpty) ans,
-        ].join('\n\n');
+        // 角色扮演：与详情页同一套口径，按题号列出——
+        // 三问（ask 是中文提示）取「你要问的英文问题（参考）」＝ q.std 里的英文问句；
+        // 五答取最短参考答案。序号用带圈数字，对应详情页的序号小图标。
+        const circled = [
+          '①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨', '⑩',
+          '⑪', '⑫', '⑬', '⑭', '⑮', '⑯', '⑰', '⑱', '⑲', '⑳',
+        ];
+        final lines = <String>[];
+        var n = 0;
+        for (final q in c.questions) {
+          final isAsk = RegExp(r'[\u4e00-\u9fff]').hasMatch(q.ask);
+          String raw;
+          if (isAsk) {
+            // 你要问的英文问题（参考）：英文问句本身，不是对话中的答案
+            raw = q.std
+                .map((s) => s.value.trim())
+                .firstWhere((v) => v.isNotEmpty, orElse: () => '');
+          } else {
+            final cands = [
+              if (q.answer.trim().isNotEmpty) q.answer.trim(),
+              for (final st in q.std)
+                if (st.value.trim().isNotEmpty) st.value.trim(),
+            ]..sort((a, b) => a.length.compareTo(b.length));
+            raw = cands.isNotEmpty ? cands.first : '';
+          }
+          final t = _clean(raw);
+          if (t.isEmpty) continue;
+          final badge = n < circled.length ? circled[n] : '${n + 1}.';
+          lines.add('$badge $t');
+          n++;
+        }
+        body = lines.join('\n');
       case EtsStructure.picture:
         // 故事复述：最短的范文
         final std = _shortest(c.stdAnswers.map((a) => a.value).toList());
