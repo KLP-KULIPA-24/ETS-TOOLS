@@ -9,7 +9,7 @@ AI 功能仅在用户自行配置接口后由用户主动触发。仅供学习�
 以及每次打开软件时顺手确认一下当前版本没被停用（确认过一次，之后就不再打扰）。
 版本黑名单在 `docs/version.json` 的 `blacklist` 字段里维护。
 
-**作者：苦力怕.KULIPA** · [GitHub @KLP-KULIPA-24](https://github.com/KLP-KULIPA-24)
+**作者：苦力怕.KULIPA**
 
 ## 功能总览
 
@@ -60,20 +60,6 @@ adb pull /storage/emulated/0/Android/data/com.ets100.secondary/files/Download/ET
 包含 `paper.Jason` 的套题目录都会被识别，因此 Mumu 模拟器共享目录、
 未来版本改目录名也能兼容。
 
-## 支持的题型（structure_type）
-
-| collector | 说明 | 答案来源 |
-| --- | --- | --- |
-| `collector.word` | 单词跟读 | `value` + `translate` |
-| `collector.read` | 模仿朗读 | 原文 + `videotime` 逐句时间轴 |
-| `collector.3q5a` | 角色扮演 | `answer` + `std[]` + `keywords` 评分关键词 |
-| `collector.picture` | 故事复述 | `std[]` 范文 + `keypoint` 要点 |
-| `collector.repeat_dialogue` | 对话跟读（同步课文） | `sublist[]` 逐句原文/翻译/角色/时间轴 |
-| 未知 | 通用渲染 + AI 自适应识别 | AI |
-
-新增题型时在 `lib/models/ets_models.dart` 的 `EtsStructure` 注册，
-在 `lib/pages/detail/typed_views.dart` 增加分支即可；未注册的题型自动落入通用渲染。
-
 ## AI 配置
 
 设置页填入任意 OpenAI 兼容接口即可：
@@ -81,114 +67,6 @@ adb pull /storage/emulated/0/Android/data/com.ets100.secondary/files/Download/ET
 - Base URL 例：`https://api.deepseek.com/v1`
 - API Key
 - 模型 例：`deepseek-chat` / `glm-4-flash` / `kimi-k2`
-
-## 构建与出包
-
-**固定流程：双击 `tools\build\build_release.bat`**，依次完成
-静态检查 → 单元测试 → Windows 构建 → 便携版打包 → 开发者版展开 → 安装包生成 → 安卓 APK，
-产物自动归档：
-
-```
-产物\Windows\安装版\        E听说助手-Setup-<版本>-x64.exe
-产物\Windows\绿色便携版\    E听说助手-<版本>-绿色便携版.zip
-产物\Windows\开发者使用版\  E听说助手-<版本>-开发者版\   （已展开，免解压）
-产物\安卓\                    E听说助手-<版本>.apk
-```
-
-单独构建：`flutter build windows --release` / `flutter build apk --release`。
-架构与目录说明见 `docs/ARCHITECTURE.md`。
-
-
-## 已知环境备注（本机已配置好，换机时参照）
-
-1. Windows 需开启开发者模式（symlink 权限）。
-2. 国内网络：`PUB_HOSTED_URL=https://pub.flutter-io.cn`、
-   `FLUTTER_STORAGE_BASE_URL=https://storage.flutter-io.cn`；
-   Gradle 走 `~/.gradle/init.gradle` 里的阿里云 Maven 镜像。
-3. pub 缓存偶发不完整包（空目录），删除对应包目录重新 `pub get` 即可。
-4. 若插件硬编码的 compileSdk 低于 36，会触发
-   `requires ... version 36` AAR 校验错误，按 README 提示把对应插件
-   `android/build.gradle(.kts)` 里的 `compileSdk` 手动改为 36。
-5. Kotlin 增量编译在跨盘符路径会崩，工程已设 `kotlin.incremental=false`。
-6. VS2026 对 `<experimental/coroutine>` 报错、GBK 代码页对 UTF-8 源码报 C4819，
-   均已在 `windows/CMakeLists.txt` 全局处理。
-
-## GitHub 上传清单
-
-仓库：<https://github.com/KLP-KULIPA-24>（开源）。以下按「入仓」与「走 Releases」两处分开。
-
-### 入仓（源码 + 展示页）
-
-| 上传 | 说明 |
-| --- | --- |
-| `lib/` `test/` | 全部 Dart 源码与测试（62 个测试） |
-| `android/` `windows/` | 双端工程（**签名文件已被 .gitignore 排除**，见下方） |
-| `assets/` `pubspec.yaml` `pubspec.lock` `analysis_options.yaml` | 资源与依赖锁定 |
-| `tools/` `docs/` | 构建脚本、设计规范（`docs/style-pack/`）与架构文档 |
-| `web/docs/` | 项目主页（Pages 发布的就是它）：`index.html`、`version.json`（App「检查更新」读的版本号）、`media/`（宣传视频与海报）、`assets/`、`vendor/` |
-| `docs/` | **网页源 + Pages 发布目录**：`index.html`、`version.json`、`media/`（宣传视频与海报）、`assets/`、`vendor/`，以及设计文档（`ARCHITECTURE.md`、`style-pack/`） |
-| `README.md` `CHANGELOG.md` `LICENSE` `发行日志/` | 说明、发行说明、许可证（MIT）与每个版本的 Release 正文 |
-
-> `web/promo/`、`web/README.md` 不入仓、不上传——**已弃用**；`web/docs/` 也不入仓（本机历史拷贝，仓库 `docs/` 才是网页源）。
-
-> 用网页拖拽上传时 `.gitignore` **不会生效**，务必别把 `android/key.properties`、`android/app/*.jks`
-> 和 `build/`、`产物/`、`TX.png` 一起拖进去；用 `git init` + push 则自动按 `.gitignore` 排除。
-
-**绝不入仓**（已在 `.gitignore`）：
-
-- `android/key.properties`、`android/app/*.jks`——**APK 签名密钥与密码，泄露等于任何人都能伪造你的签名**；
-- `android/local.properties`——本机 SDK 路径；
-- `build/`、`.dart_tool/`、`产物/`——构建产物；
-- `TX.png`（3MB 头像原图，压缩版已在 `assets/`）、`docs/next-session-prompt.md`（内部提示词）；
-- `tools/remotion-promo/`、`tools/promo-reel/`（**视频制作产线**：含 node_modules 与第三方引擎副本，
-  体积大、含他方许可代码，**不入仓**；仅本机出片用）；
-- 仓库外的 `抓包数据/`、`ETSToolbox-main/`（真实抓包样本与逆向工具，**不要上传**，含他人数据）。
-
-### 走 GitHub Releases（安装包不入仓，仓库只放源码）
-
-先本地出包（`powershell -File tools/build/build_release.ps1`），再把下列文件拖进 Releases 页面：
-
-- `产物\Windows\安装版\E听说助手-<版本>-x64.exe`
-- `产物\Windows\绿色便携版\E听说助手-<版本>-绿色便携版.zip`
-- `产物\安卓\E听说助手-<版本>.apk`
-
-（`产物\Windows\开发者使用版\` 是已展开目录，仅本机调试用，不上传。）
-
-### 展示页上线（GitHub Pages）
-
-**网页源就是仓库根目录 `docs/`**（Pages 的源），直接改这里提交即可；保持 `index.html` 与 `media/`、`assets/`、
-`vendor/` 的相对层级——`index.html` 里引用的是 `./media/E听说宣传视频.mp4` 等相对路径。
-
-- 仓库 Settings → Pages → Source 选 `main` 分支 + `/docs` 目录，保存后过 1~2 分钟生效；
-- 本机 `web/docs/` 是历史遗留的另一份拷贝（**不入仓、已进 .gitignore**）：以后改网页只改仓库 `docs/`，
-  或者改完手动 `cp -r web/docs/. docs/` 同步，别再让两份各自漂移。
-
-### 版本号（App「检查更新」的取值来源）
-
-App 启动时会（设置 → 关于 里可关）请求官网读取版本号，与本地 `kAppVersion`
-（`lib/services/settings_service.dart`，当前 `0.8.1`）比对：
-
-1. 优先读 `https://klp-kulipa-24.github.io/ETS-TOOLS/version.json`——**发版时改这一个文件最省事**；
-2. 取不到就回退：抓官网首页，读 `class="nav-ver"` / `class="foot-ver"` 里的 `V0.8.1`。
-
-所以**发新版本时要一起改这五处**：`pubspec.yaml` 的 `version:`、`lib/services/settings_service.dart` 的 `kAppVersion`、
-`windows/installer.iss` 的 `MyAppVersion`、`docs/version.json` 的 `version`、`docs/index.html` 的 `V0.8.x`（nav-ver / foot-ver）。
-比较按整数逐段（`0.10 > 0.9`），`0.8` 与 `0.8.0` 视为同一版本。
-
-App 只请求两个白名单主机：主站 `https://klp-kulipa-24.github.io/ETS-TOOLS/` 与
-备用站 `https://ets-tools.klp-kulipa.workers.dev/`（内容与主站一致）——**主站连不上就自动改问备用站**
-（国内访问不了 GitHub Pages 时不至于查不到更新）。改版时**两个站的内容都要更新**（备用站是独立的一份静态副本，不是实时反代）。
-
-### 下载渠道与制品名
-
-网页与 App 都按四个渠道给下载入口：**蓝奏云**（提取码 `ets`）/ **银盘** / **GitHub 解析下载**（前缀见下）/ **GitHub 原版下载**。
-出包脚本的产物名与 Release 资产名一致（`ETS-TOOLS-Setup-<版本>-x64.exe` / `ETS-TOOLS-<版本>-win.zip` /
-`ETS-TOOLS-Android-<版本>.apk`），**拖进 Release 不用再手动改名**。
-
-网页里的 GitHub 直链写在 `docs/index.html` 的 `REL_BASE`（当前 `…/releases/download/V0.8.1/`），
-**发新版时改这一处**，并保证资产名与上面格式一致、tag 用 `V<版本>`（如 `V0.8.1`）。
-网盘（蓝奏云 / 银盘）那六条链接写在同一文件的 `DL_CHANS` 里，换文件重传后要同步更新。
-加速解析前缀在网页 `docs/index.html` 的 `MIRROR` 与 App 的 `kShizukuMirrorUrl` 两处，需保持一致。
 
 ## 免责声明
 
