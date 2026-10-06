@@ -85,11 +85,17 @@ class MainActivity : FlutterActivity() {
                     "floatingShow" -> {
                         val title = call.argument<String>("title") ?: ""
                         val answers = call.argument<String>("answers") ?: ""
-                        val size = call.argument<Int>("size") ?: 0
-                        val opacity = call.argument<Double>("opacity") ?: 0.95
+                        // 数字一律按 Number 接：Dart 的 int 超过 int32 上限会被编码成
+                        // int64（Java 侧是 Long），强转 Integer 直接 ClassCastException。
+                        // 主题色 0xFF4F7CFF 就超了——悬浮窗"打不开"的真凶就是它。
+                        val size = (call.argument<Any>("size") as? Number)?.toInt() ?: 0
+                        val opacity =
+                            (call.argument<Any>("opacity") as? Number)?.toDouble() ?: 0.95
                         val partsJson = call.argument<String>("parts") ?: ""
                         val theme = call.argument<String>("theme") ?: "follow"
-                        val accent = call.argument<Int>("accent") ?: 0xFF4F7CFF.toInt()
+                        val accent =
+                            (call.argument<Any>("accent") as? Number)?.toInt()
+                                ?: 0xFF4F7CFF.toInt()
                         val darkMode =
                             resources.configuration.uiMode and
                                 android.content.res.Configuration.UI_MODE_NIGHT_MASK ==
@@ -135,10 +141,11 @@ class MainActivity : FlutterActivity() {
                         }
                     }
                     "floatingApply" -> {
-                        val w = call.argument<Int>("size") ?: 44
-                        val op = call.argument<Double>("opacity") ?: 0.95
+                        val w = (call.argument<Any>("size") as? Number)?.toInt() ?: 44
+                        val op =
+                            (call.argument<Any>("opacity") as? Number)?.toDouble() ?: 0.95
                         val theme = call.argument<String>("theme")
-                        val accent = call.argument<Int>("accent")
+                        val accent = (call.argument<Any>("accent") as? Number)?.toInt()
                         runOnUiThread {
                             floating.applyStyle(w, op, theme, accent)
                             result.success("ok")

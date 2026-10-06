@@ -16,7 +16,11 @@ String etsCleanHtml(String raw) {
       .replaceAll('\r\n', '\n')
       .replaceAll(RegExp(r'</?br\s*/?>', caseSensitive: false), '\n')
       .replaceAll(RegExp(r'</p>\s*<p>', caseSensitive: false), '\n')
-      .replaceAll(RegExp(r'<[^>]+>'), '')
+      // 剩余标签给空格而不是删空：直接删会让相邻单词粘在一起
+      .replaceAll(RegExp(r'<[^>]+>'), ' ')
+      // 只压水平空白、保留换行（段落结构靠换行区分）
+      .replaceAll(RegExp(r'[ \t]{2,}'), ' ')
+      .replaceAll(RegExp(r' *\n *'), '\n')
       .replaceAll(RegExp(r'\n{3,}'), '\n\n')
       .trim();
 }
@@ -178,15 +182,17 @@ class ContentUnit {
       '${info['stid'] ?? folderName.replaceAll(RegExp(r'^content_'), '')}';
 
   // ---- 各题型字段快捷访问 ----
-  String get text => '${info['value'] ?? ''}';
+  String get text => etsCleanHtml('${info['value'] ?? ''}');
   String get audio => '${info['audio'] ?? ''}';
   String get image => '${info['image'] ?? ''}';
   String get video => '${info['video'] ?? ''}';
-  String get translate => '${info['translate'] ?? ''}';
-  String get analyze => '${info['analyze'] ?? ''}';
-  String get aiText => '${info['ai'] ?? ''}'; // 官方分行版原文
-  String get topic => '${info['topic'] ?? ''}'; // picture 标题
-  String get readTitle => '${info['read_title'] ?? ''}'; // word 标题
+  // 正文类一律过清洗：这里原始值带着 </p><p> 之类，
+  // 早先只在个别显示处洗，漏掉的地方就露出标签
+  String get translate => etsCleanHtml('${info['translate'] ?? ''}');
+  String get analyze => etsCleanHtml('${info['analyze'] ?? ''}');
+  String get aiText => etsCleanHtml('${info['ai'] ?? ''}'); // 官方分行版原文
+  String get topic => etsCleanHtml('${info['topic'] ?? ''}'); // picture 标题
+  String get readTitle => etsCleanHtml('${info['read_title'] ?? ''}'); // word 标题
   String get videoTime => '${info['videotime'] ?? ''}'; // 朗读逐句时间轴
 
   /// 三问五答题列表

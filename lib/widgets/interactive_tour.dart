@@ -39,12 +39,19 @@ class _InteractiveTourState extends State<InteractiveTour> {
         builder: (context, constraints) {
           final step = widget.steps[_i];
           Rect? hole;
-          if (step.key?.currentContext != null) {
-            final box =
-                step.key!.currentContext!.findRenderObject() as RenderBox?;
-            if (box != null && box.hasSize) {
-              final pos = box.localToGlobal(Offset.zero);
-              hole = pos & box.size;
+          // 只查 currentContext != null 不够：元素处于 inactive 生命周期时
+          // context 仍在，findRenderObject() 会抛 "Cannot get renderObject
+          // of inactive element"。包一层 try 兜住，取不到就不挖洞。
+          final ctx = step.key?.currentContext;
+          if (ctx != null) {
+            try {
+              final box = ctx.findRenderObject() as RenderBox?;
+              if (box != null && box.hasSize) {
+                final pos = box.localToGlobal(Offset.zero);
+                hole = pos & box.size;
+              }
+            } catch (_) {
+              hole = null;
             }
           }
           final anim = hole;

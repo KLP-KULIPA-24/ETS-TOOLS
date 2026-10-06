@@ -18,6 +18,10 @@ import 'settings_service.dart';
 /// 为什么不用全局 AudioPlayerService：朗读是"临时短音频"，
 /// 不该出现在全局迷你播放条里，也不该被 AB 循环那套逻辑牵扯。
 /// 这里自带一个独立播放器，只与全局播放器互斥。
+/// toggle 的三种结果：手动停止不能和「失败」混为一谈，
+/// 否则用户按暂停也会弹朗读报错
+enum TtsResult { playing, stopped, failed }
+
 class TtsService {
   static final TtsService I = TtsService._();
 
@@ -157,6 +161,19 @@ class TtsService {
     } catch (_) {}
   }
 
+  /// 朗读总时长（秒）；合成完才拿得到
+  double get durationSec {
+    final d = _player.duration;
+    return d == null ? 0 : d.inMilliseconds / 1000.0;
+  }
+
+  /// 拖动朗读进度（just_audio 支持 seek，早年 TTS 不能 seek 是旧实现的限制）
+  Future<void> seek(double seconds) async {
+    try {
+      await _player.seek(Duration(milliseconds: (seconds * 1000).round()));
+    } catch (_) {}
+  }
+
   Future<void> stop() async {
     try {
       await _player.stop();
@@ -169,11 +186,12 @@ class TtsService {
   /// 朗读或停止（按钮行为）。正在读别的内容时直接切换到新文本，
   /// 不用先点一次停止（旧行为：只会停掉当前朗读，得再点一次才开始读新的）。
   /// [owner] 是发起按钮的身份号：只有"本条"按钮才显示停止态，避免串台。
-  Future<bool> toggle(String text, {int owner = -1}) async {
+  Future<TtsResult> toggle(String text, {int owner = -1}) async {
     if (speaking.value && currentOwner.value == owner && owner != -1) {
       await stop();
-      return false;
+      return TtsResult.stopped;
     }
-    return speak(text, owner: owner);
+    final ok = await speak(text, owner: owner);
+    return ok ? TtsResult.playing : TtsResult.failed;
   }
 }

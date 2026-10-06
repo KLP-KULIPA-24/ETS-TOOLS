@@ -48,6 +48,9 @@ class _SettingsPageState extends State<SettingsPage> {
   final _kFloating = GlobalKey();
   final _kAbout = GlobalKey();
   int _section = 0;
+  // 主动跳转期间抑制滚动联动：否则动画途中 _syncSection 每帧换高亮，
+  // 与 _jumpTo 的多次校正叠加，点导航就是一抽一抽的
+  bool _jumping = false;
   String? _prov;
   String? _city;
 
@@ -65,6 +68,29 @@ class _SettingsPageState extends State<SettingsPage> {
     super.initState();
     _scroll.addListener(_syncSection);
     ShellChrome.jumpSection.addListener(_onJumpSection);
+    _syncExamFromSettings();
+  }
+
+  /// 从设置回填省/市：这两个是页面本地变量，不回填的话数据明明存了，
+  /// 一进页面却显示"选择省份"，看着像没保存（用户反馈"填了没自动保存"）。
+  /// 存的是省名+市名直接拼接，所以按"哪个省名是前缀"反解出来。
+  void _syncExamFromSettings() {
+    final region = SettingsService.I.region.trim();
+    if (region.isEmpty) return;
+    String? prov;
+    String? city;
+    for (final k in kRegionMap.keys) {
+      if (region.startsWith(k)) {
+        prov = k;
+        final rest = region.substring(k.length);
+        city = rest.isEmpty ? null : rest;
+        break;
+      }
+    }
+    if (prov != null) {
+      _prov = prov;
+      _city = city;
+    }
   }
 
   /// 从别的页跳进来（"去填写考试信息"）：直接落到对应分区，不只开设置页
@@ -86,9 +112,16 @@ class _SettingsPageState extends State<SettingsPage> {
 
   void _jumpTo(GlobalKey key) {
     Future<void> align({required bool animate}) async {
-      final box = key.currentContext?.findRenderObject() as RenderBox?;
-      final scrollBox = _scrollViewKey.currentContext?.findRenderObject()
-          as RenderBox?;
+      // 元素 inactive 时 findRenderObject() 会抛，包 try 兜住
+      RenderBox? box;
+      RenderBox? scrollBox;
+      try {
+        box = key.currentContext?.findRenderObject() as RenderBox?;
+        scrollBox =
+            _scrollViewKey.currentContext?.findRenderObject() as RenderBox?;
+      } catch (_) {
+        return;
+      }
       if (box == null || !box.hasSize || scrollBox == null) return;
       if (!_scroll.hasClients) return;
       // ensureVisible 只做"最少滚到看得见"，目标卡片大部分已在视口下方时
@@ -112,13 +145,23 @@ class _SettingsPageState extends State<SettingsPage> {
 
     // 上方的提取通道卡片在异步探测返回后会展开变高，把目标往下推——
     // 一次对位不够，动画结束后再校正两次
+    _jumping = true;
     align(animate: true);
-    Future.delayed(const Duration(milliseconds: 400), () => align(animate: true));
-    Future.delayed(const Duration(milliseconds: 900), () => align(animate: true));
+    Future.delayed(const Duration(milliseconds: 400), () {
+      if (mounted) align(animate: true);
+    });
+    Future.delayed(const Duration(milliseconds: 900), () {
+      if (mounted) align(animate: true);
+    });
+    // 等三次对位都走完再恢复联动
+    Future.delayed(const Duration(milliseconds: 1100), () {
+      if (mounted) setState(() => _jumping = false);
+    });
   }
 
   /// 分区导航随滚动联动：取各分区顶部最接近视口上沿的那个作为当前分区
   void _syncSection() {
+    if (_jumping) return;
     // 取"顶部最接近判定线"的那个分区。只认 dy<=80 的话，滚到两区之间
     // 会没有任何分区命中，高亮就停在上一区不动了。
     const line = 8.0;
@@ -127,7 +170,12 @@ class _SettingsPageState extends State<SettingsPage> {
     for (var i = 0; i < _sections.length; i++) {
       final ctx = _sections[i].$2.currentContext;
       if (ctx == null) continue;
-      final box = ctx.findRenderObject() as RenderBox?;
+      RenderBox? box;
+      try {
+        box = ctx.findRenderObject() as RenderBox?;
+      } catch (_) {
+        continue;
+      }
       if (box == null || !box.hasSize) continue;
       final gap = (box.localToGlobal(Offset.zero).dy - line).abs();
       if (gap < bestGap) {
@@ -597,10 +645,11 @@ class _SettingsPageState extends State<SettingsPage> {
                                   if (v == null) return;
                                   setState(() {
                                     _prov = v;
+                                    // 换省后城市清空，由用户自己选；
+                                    // 早先自动塞了该省第一个城市，看着像乱填
                                     _city = null;
                                   });
-                                  final city = kRegionMap[v]!.first;
-                                  s.setExamInfo(region: v + city);
+                                  s.setExamInfo(region: v);
                                 },
                               ),
                             ),

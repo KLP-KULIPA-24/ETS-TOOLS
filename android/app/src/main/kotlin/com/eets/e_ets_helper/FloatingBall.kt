@@ -209,8 +209,15 @@ class FloatingBall(private val context: Context) {
                     val dy = event.rawY - downRawY
                     if (!dragging && (abs(dx) > touchSlop || abs(dy) > touchSlop)) dragging = true
                     if (dragging) {
-                        params?.x = (startX + dx).toInt()
-                        params?.y = (startY + dy).toInt()
+                        // 钳制在屏幕内：早先直接 startX+dx，拖到边上就再也回不来
+                        val metrics = context.resources.displayMetrics
+                        val w = if (expanded) dp(expandedWidthDp()) else dp(ballSizeDp)
+                        val margin = dp(12)
+                        val maxX = (metrics.widthPixels - w - margin).coerceAtLeast(margin)
+                        val maxY = (metrics.heightPixels - dp(ballSizeDp) - margin)
+                            .coerceAtLeast(margin)
+                        params?.x = (startX + dx).toInt().coerceIn(margin, maxX)
+                        params?.y = (startY + dy).toInt().coerceIn(margin, maxY)
                         card.let { c -> params?.let { p -> wm.updateViewLayout(c, p) } }
                     }
                     true
@@ -329,8 +336,14 @@ class FloatingBall(private val context: Context) {
             b.layoutParams = LinearLayout.LayoutParams(s, s)
         }
         params?.let { p ->
-            p.width = if (expanded) dp(expandedWidthDp()) else dp(ballSizeDp)
+            val w = if (expanded) dp(expandedWidthDp()) else dp(ballSizeDp)
+            p.width = w
             p.height = if (expanded) LinearLayout.LayoutParams.WRAP_CONTENT else dp(ballSizeDp)
+            // 展开后宽度变大，位置要跟着往左收，否则右缘会溢出屏幕
+            val metrics = context.resources.displayMetrics
+            val margin = dp(12)
+            val maxX = (metrics.widthPixels - w - margin).coerceAtLeast(margin)
+            p.x = p.x.coerceIn(margin, maxX)
             try {
                 wm.updateViewLayout(c, p)
             } catch (_: Throwable) {
@@ -366,10 +379,16 @@ class FloatingBall(private val context: Context) {
                 WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
             PixelFormat.TRANSLUCENT,
         ).apply {
+            // 保持 TOP|START：拖动是按 params.x 加减增量算的（见下方 onTouchListener），
+            // 换成 Gravity.END 会让水平拖动方向反掉。
             gravity = Gravity.TOP or Gravity.START
-            // 默认挂在屏幕右侧中部：避开顶部设置栏（用户反馈球压住顶栏）
+            // 默认挂在屏幕右侧中部：避开顶部设置栏（用户反馈球压住顶栏）。
+            // 全部用 px 统一口径——早先 metrics.widthPixels（px）减 dp()（已换算成 px）
+            // 混算，900px 屏上球漂到了中间；密度大的机器甚至会算出负数。
             val metrics = context.resources.displayMetrics
-            x = metrics.widthPixels - dp(expandedWidthDp()) - dp(12)
+            val margin = dp(12)
+            x = (metrics.widthPixels - dp(ballSizeDp) - margin)
+                .coerceIn(margin, (metrics.widthPixels - dp(ballSizeDp) - margin).coerceAtLeast(margin))
             y = (metrics.heightPixels * 0.42f).toInt()
         }
         val view = buildCard(title, answers)

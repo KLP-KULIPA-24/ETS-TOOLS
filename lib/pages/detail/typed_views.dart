@@ -1692,6 +1692,8 @@ class _SentenceListViewState extends State<SentenceListView> {
 
   // 每句一个朗读归属号：同文本的两句也各自独立，按钮状态不串台
   final Map<int, int> _ttsOwner = {};
+  // 朗读进度拖动中的临时值（0–1）
+  double? _dragTts;
   int _ownerOf(int i) => _ttsOwner.putIfAbsent(i, _nextTtsOwner);
 
   @override
@@ -1826,15 +1828,33 @@ class _SentenceListViewState extends State<SentenceListView> {
                               return Row(
                                 children: [
                                   Expanded(
-                                    child: ClipRRect(
-                                      borderRadius: BorderRadius.circular(999),
-                                      child: LinearProgressIndicator(
-                                        value: active ? pr : (done ? 1 : 0),
-                                        minHeight: 3,
-                                        backgroundColor: cs.primary.withValues(
-                                          alpha: 0.12,
+                                    child: SliderTheme(
+                                      data: SliderTheme.of(context).copyWith(
+                                        trackHeight: 3,
+                                        thumbShape: const RoundSliderThumbShape(
+                                          enabledThumbRadius: 4,
                                         ),
-                                        color: cs.primary,
+                                        overlayShape:
+                                            const RoundSliderOverlayShape(
+                                              overlayRadius: 9,
+                                            ),
+                                      ),
+                                      child: Slider(
+                                        value: _dragTts ??
+                                            (active ? pr : (done ? 1 : 0)),
+                                        max: 1,
+                                        onChanged: (v) => setState(
+                                          () => _dragTts = v,
+                                        ),
+                                        onChangeEnd: (v) {
+                                          final d = TtsService.I.durationSec;
+                                          if (d > 0) {
+                                            TtsService.I.seek(v * d);
+                                          }
+                                          if (mounted) {
+                                            setState(() => _dragTts = null);
+                                          }
+                                        },
                                       ),
                                     ),
                                   ),
@@ -1920,6 +1940,8 @@ class _TtsButton extends StatefulWidget {
 
 class _TtsButtonState extends State<_TtsButton> {
   late final int _owner = _nextTtsOwner();
+  // 朗读进度拖动中的临时值（0–1），拖动期间不被播放器回传顶回
+  double? _dragTts;
 
   bool get _mine =>
       TtsService.I.speaking.value && TtsService.I.currentOwner.value == _owner;
@@ -1944,11 +1966,12 @@ class _TtsButtonState extends State<_TtsButton> {
               visualDensity: VisualDensity.compact,
               onPressed: () async {
                 final messenger = ScaffoldMessenger.of(context);
-                final ok = await TtsService.I.toggle(
+                final r = await TtsService.I.toggle(
                   widget.text,
                   owner: _owner,
                 );
-                if (!ok && context.mounted) {
+                // 只有真失败才提示：手动暂停朗读不能弹报错
+                if (r == TtsResult.failed && context.mounted) {
                   final err = TtsService.I.lastError.value;
                   messenger.showSnackBar(
                     SnackBar(
@@ -1980,15 +2003,26 @@ class _TtsButtonState extends State<_TtsButton> {
                       Expanded(
                         child: ValueListenableBuilder<double>(
                           valueListenable: TtsService.I.progress,
-                          builder: (context, p, _) => ClipRRect(
-                            borderRadius: BorderRadius.circular(999),
-                            child: LinearProgressIndicator(
-                              value: p,
-                              minHeight: 4,
-                              backgroundColor: cs.primary.withValues(
-                                alpha: 0.15,
+                          builder: (context, p, _) => SliderTheme(
+                            data: SliderTheme.of(context).copyWith(
+                              trackHeight: 4,
+                              thumbShape: const RoundSliderThumbShape(
+                                enabledThumbRadius: 5,
                               ),
-                              color: cs.primary,
+                              overlayShape: const RoundSliderOverlayShape(
+                                overlayRadius: 10,
+                              ),
+                            ),
+                            child: Slider(
+                              value: _dragTts ?? p,
+                              max: 1,
+                              // 可拖：just_audio 支持 seek（旧 TTS 实现不能，所以早先是只读条）
+                              onChanged: (v) => setState(() => _dragTts = v),
+                              onChangeEnd: (v) {
+                                final d = TtsService.I.durationSec;
+                                if (d > 0) TtsService.I.seek(v * d);
+                                if (mounted) setState(() => _dragTts = null);
+                              },
                             ),
                           ),
                         ),

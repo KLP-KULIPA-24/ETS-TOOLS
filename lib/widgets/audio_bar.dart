@@ -39,6 +39,10 @@ class _AudioBarState extends State<AudioBar> {
   double _pos = 0;
   double _dur = 0;
 
+  // 拖动中的临时位置：不为空时优先于 _pos。
+  // 否则每 200ms 的播放器回传会把手势顶回原位（表现就是"拖不动"）
+  double? _dragPos;
+
   @override
   void initState() {
     super.initState();
@@ -134,10 +138,22 @@ class _AudioBarState extends State<AudioBar> {
                             ),
                           ),
                           child: Slider(
-                            value: active && _dur > 0 ? _pos.clamp(0, _dur) : 0,
+                            // 拖动期间用本地拖动态，松手再交回播放器的真实位置
+                            value: active && _dur > 0
+                                ? (_dragPos ?? _pos).clamp(0, _dur)
+                                : 0,
                             max: _dur > 0 ? _dur : 1,
                             onChanged: active && _dur > 0
-                                ? (v) => ps.seek(v)
+                                ? (v) {
+                                    setState(() => _dragPos = v);
+                                    ps.seek(v);
+                                  }
+                                : null,
+                            onChangeEnd: active && _dur > 0
+                                ? (v) {
+                                    ps.seek(v);
+                                    if (mounted) setState(() => _dragPos = null);
+                                  }
                                 : null,
                           ),
                         ),
