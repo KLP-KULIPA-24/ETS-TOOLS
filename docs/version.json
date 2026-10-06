@@ -2,5 +2,6 @@
   "version": "0.8.2",
   "released": "2026-10-05",
   "url": "https://klp-kulipa-24.github.io/ETS-TOOLS/",
-  "notes": "V0.8.2：悬浮窗改原生实现（分段切换、跟随主题配色、默认位置避开顶栏），Android 视频换 ExoPlayer，考试信息门控，逐句朗读进度条修复，视觉细节打磨。"
+  "notes": "V0.8.2：悬浮窗改原生实现（分段切换、跟随主题配色、默认位置避开顶栏），Android 视频换 ExoPlayer，考试信息门控，逐句朗读进度条修复，视觉细节打磨。",
+  "blacklist": []
 }
